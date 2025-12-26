@@ -4,63 +4,61 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Story, ChapterType } from '@/types';
+import { ChapterType } from '@/types';
 import { chapters } from '@/lib/utils/chapters';
 
-// Mock stories for demo (will be replaced with Supabase)
-const mockStories: Story[] = [
-  {
-    id: '1',
-    userId: '1',
-    title: 'The Winking Star',
-    content:
-      'It was Christmas 1952, and we had this beautiful pine tree that barely fit through the door. Dad had insisted on cutting it himself from Uncle Jim\'s farm...',
-    chapter: 'where-i-come-from',
-    tags: ['Christmas', 'Family', 'Traditions'],
-    createdAt: new Date('2024-12-20'),
-    updatedAt: new Date('2024-12-20'),
-    isPublic: false,
-  },
-  {
-    id: '2',
-    userId: '1',
-    title: 'Brothers and Dirt Clod Fights',
-    content:
-      'We would go on hikes, have dirt clod fights, and play Cowboys and Indians. We had a creek that ran by our house that we would often go play in as kids...',
-    chapter: 'where-i-come-from',
-    tags: ['Childhood', 'Brother', 'Adventures'],
-    createdAt: new Date('2024-12-19'),
-    updatedAt: new Date('2024-12-19'),
-    isPublic: false,
-  },
-  {
-    id: '3',
-    userId: '1',
-    title: 'The Day We Went Our Separate Ways',
-    content:
-      'We met at our high school parking lot. He was going to Missouri and I was going to California. A sense of freedom and a sense of sadness...',
-    chapter: 'who-i-am',
-    tags: ['Growth', 'Independence', 'Twin'],
-    createdAt: new Date('2024-12-18'),
-    updatedAt: new Date('2024-12-18'),
-    isPublic: false,
-  },
-];
+// Story type matching what we get from the API
+interface ApiStory {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  narrative_prose?: string;
+  chapter: ChapterType;
+  tags: string[];
+  sentiment_score?: number;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function StoriesPage() {
-  const [stories, setStories] = useState<Story[]>([]);
+  const [stories, setStories] = useState<ApiStory[]>([]);
   const [filter, setFilter] = useState<ChapterType | 'all'>('all');
   const [userName, setUserName] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load stories (mock for now)
-    setStories(mockStories);
-
     // Get user name from localStorage
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) {
       setUserName(storedName);
     }
+
+    // Fetch stories from API
+    const fetchStories = async () => {
+      try {
+        const response = await fetch('/api/stories');
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Not logged in - show empty state
+            setStories([]);
+            return;
+          }
+          throw new Error('Failed to fetch stories');
+        }
+        const data = await response.json();
+        setStories(data.stories || []);
+      } catch (err) {
+        console.error('Error fetching stories:', err);
+        setError('Failed to load stories');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStories();
   }, []);
 
   const filteredStories =
@@ -100,9 +98,34 @@ export default function StoriesPage() {
             {userName ? `${userName}'s Stories` : 'My Stories'}
           </h1>
           <p className="text-gray-600">
-            {stories.length} {stories.length === 1 ? 'story' : 'stories'} preserved
+            {isLoading ? 'Loading...' : `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} preserved`}
           </p>
         </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Loading state */}
+        {isLoading && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="pb-3">
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                  <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-16 bg-gray-100 rounded mb-4"></div>
+                  <div className="h-4 bg-gray-100 rounded w-1/3"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div className="mb-8 overflow-x-auto">
@@ -134,7 +157,7 @@ export default function StoriesPage() {
         </div>
 
         {/* Stories grid */}
-        {filteredStories.length > 0 ? (
+        {!isLoading && filteredStories.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredStories.map((story) => {
               const chapterInfo = getChapterInfo(story.chapter);
@@ -154,10 +177,10 @@ export default function StoriesPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-600 line-clamp-3 mb-4">
-                      {story.content}
+                      {story.narrative_prose || story.content}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {story.tags.slice(0, 3).map((tag) => (
+                      {(story.tags || []).slice(0, 3).map((tag) => (
                         <span
                           key={tag}
                           className="px-2 py-1 bg-gray-100 rounded-full text-xs text-gray-600"
@@ -167,7 +190,7 @@ export default function StoriesPage() {
                       ))}
                     </div>
                     <p className="text-sm text-gray-400">
-                      {new Date(story.createdAt).toLocaleDateString('en-US', {
+                      {new Date(story.created_at).toLocaleDateString('en-US', {
                         month: 'long',
                         day: 'numeric',
                         year: 'numeric',
@@ -178,7 +201,7 @@ export default function StoriesPage() {
               );
             })}
           </div>
-        ) : (
+        ) : !isLoading && (
           <div className="text-center py-16">
             <span className="text-6xl mb-4 block">📖</span>
             <h2 className="text-2xl font-bold mb-2">No stories yet</h2>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { VoiceButton } from '@/components/conversation/VoiceButton';
@@ -9,8 +10,10 @@ import { MessageBubble } from '@/components/conversation/MessageBubble';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { Message } from '@/types';
 import { getStarterPrompts } from '@/lib/utils/chapters';
+import { PERSONAS, DEFAULT_PERSONA, getPersona } from '@/lib/personas/definitions';
 
 export default function ConversationPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -18,6 +21,9 @@ export default function ConversationPage() {
   const [userName, setUserName] = useState('');
   const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState(DEFAULT_PERSONA);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,6 +90,7 @@ export default function ConversationPage() {
           messages: [...messages, userMessage],
           userName,
           isFirstMessage: messages.length === 0,
+          persona: selectedPersona,
         }),
       });
 
@@ -181,10 +188,63 @@ export default function ConversationPage() {
     e.preventDefault();
     if (userName.trim()) {
       setShowNamePrompt(false);
+      // Store name for other pages
+      localStorage.setItem('embers_user_name', userName);
       // Send initial greeting
       const greeting = `Hi, my name is ${userName}.`;
       handleSendMessage(greeting);
     }
+  };
+
+  // Save story to database
+  const handleSaveStory = async () => {
+    if (messages.length < 2) {
+      setError('Have a conversation first before saving a story.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Combine user messages as the story content
+      const userMessages = messages.filter(m => m.role === 'user');
+      const content = userMessages.map(m => m.content).join('\n\n');
+
+      const response = await fetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          messages,
+          generateNarrative: true,
+          generateTitle: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save story');
+      }
+
+      const data = await response.json();
+      setSavedStoryId(data.story.id);
+
+      // Show success - the story was saved
+      setError(null);
+    } catch (err) {
+      console.error('Save story error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save story. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Start a new conversation
+  const handleNewConversation = () => {
+    setMessages([]);
+    setSavedStoryId(null);
+    setError(null);
   };
 
   // Name prompt screen
@@ -209,6 +269,32 @@ export default function ConversationPage() {
               className="text-center text-xl"
               autoFocus
             />
+
+            {/* Persona selector */}
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">Who would you like to talk with?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(PERSONAS).map(([key, persona]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelectedPersona(key)}
+                    className={`p-3 rounded-xl border-2 transition-all text-left ${
+                      selectedPersona === key
+                        ? 'border-ember-orange bg-ember-gradient/10'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{persona.avatar}</span>
+                      <span className="font-medium text-sm">{persona.name}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{persona.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <Button type="submit" size="lg" className="w-full" disabled={!userName.trim()}>
               Let&apos;s Begin
             </Button>
@@ -222,6 +308,8 @@ export default function ConversationPage() {
     );
   }
 
+  const currentPersona = getPersona(selectedPersona);
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
@@ -231,14 +319,54 @@ export default function ConversationPage() {
             <span className="text-2xl">🔥</span>
             <span className="text-xl font-bold text-ember-gradient">Embers</span>
           </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">Hi, {userName}</span>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <span className="text-gray-600 hidden sm:inline">
+              <span className="mr-1">{currentPersona.avatar}</span>
+              {currentPersona.name}
+            </span>
+            {messages.length >= 2 && !savedStoryId && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleSaveStory}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : '💾 Save Story'}
+              </Button>
+            )}
+            {savedStoryId && (
+              <>
+                <span className="text-green-600 text-sm hidden sm:inline">✓ Saved</span>
+                <Button variant="outline" size="sm" onClick={handleNewConversation}>
+                  New Story
+                </Button>
+              </>
+            )}
             <Button asChild variant="outline" size="sm">
               <Link href="/stories">My Stories</Link>
             </Button>
           </div>
         </div>
       </header>
+
+      {/* Saved story notification */}
+      {savedStoryId && (
+        <div className="bg-green-50 border-b border-green-200 px-4 py-3">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <p className="text-green-800">
+              ✓ Story saved successfully!
+            </p>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/stories">View Stories</Link>
+              </Button>
+              <Button size="sm" onClick={handleNewConversation}>
+                Start New Story
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <main className="flex-1 overflow-y-auto">

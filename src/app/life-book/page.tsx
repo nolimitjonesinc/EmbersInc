@@ -4,87 +4,58 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Story, ChapterType } from '@/types';
+import { ChapterType } from '@/types';
 import { chapters } from '@/lib/utils/chapters';
 
-// Mock stories for demo (will be replaced with Supabase)
-const mockStories: Story[] = [
-  {
-    id: '1',
-    userId: '1',
-    title: 'The Winking Star',
-    content:
-      'It was Christmas 1952, and we had this beautiful pine tree that barely fit through the door. Dad had insisted on cutting it himself from Uncle Jim\'s farm...',
-    chapter: 'where-i-come-from',
-    tags: ['Christmas', 'Family', 'Traditions'],
-    createdAt: new Date('2024-12-20'),
-    updatedAt: new Date('2024-12-20'),
-    isPublic: false,
-  },
-  {
-    id: '2',
-    userId: '1',
-    title: 'Brothers and Dirt Clod Fights',
-    content:
-      'We would go on hikes, have dirt clod fights, and play Cowboys and Indians. We had a creek that ran by our house that we would often go play in as kids...',
-    chapter: 'where-i-come-from',
-    tags: ['Childhood', 'Brother', 'Adventures'],
-    createdAt: new Date('2024-12-19'),
-    updatedAt: new Date('2024-12-19'),
-    isPublic: false,
-  },
-  {
-    id: '3',
-    userId: '1',
-    title: 'The Day We Went Our Separate Ways',
-    content:
-      'We met at our high school parking lot. He was going to Missouri and I was going to California. A sense of freedom and a sense of sadness...',
-    chapter: 'who-i-am',
-    tags: ['Growth', 'Independence', 'Twin'],
-    createdAt: new Date('2024-12-18'),
-    updatedAt: new Date('2024-12-18'),
-    isPublic: false,
-  },
-  {
-    id: '4',
-    userId: '1',
-    title: 'My First Job at the Cannery',
-    content:
-      'I was sixteen when I started working at the Del Monte cannery. The summer heat, the smell of peaches, and the camaraderie with the other workers...',
-    chapter: 'what-ive-learned',
-    tags: ['Work', 'Youth', 'Life Lessons'],
-    createdAt: new Date('2024-12-17'),
-    updatedAt: new Date('2024-12-17'),
-    isPublic: false,
-  },
-  {
-    id: '5',
-    userId: '1',
-    title: 'Dancing with Your Grandmother',
-    content:
-      'The first time I saw her was at a church social. She was wearing a blue dress and laughing at something her friend said. I knew right then...',
-    chapter: 'what-ive-loved',
-    tags: ['Love', 'Romance', 'Marriage'],
-    createdAt: new Date('2024-12-16'),
-    updatedAt: new Date('2024-12-16'),
-    isPublic: false,
-  },
-];
+// Story type matching what we get from the API
+interface ApiStory {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  narrative_prose?: string;
+  chapter: ChapterType;
+  tags: string[];
+  sentiment_score?: number;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function LifeBookPage() {
-  const [stories, setStories] = useState<Story[]>([]);
+  const [stories, setStories] = useState<ApiStory[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<ChapterType | null>(null);
   const [userName, setUserName] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load stories (mock for now)
-    setStories(mockStories);
-
     // Get user name from localStorage
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) {
       setUserName(storedName);
     }
+
+    // Fetch stories from API
+    const fetchStories = async () => {
+      try {
+        const response = await fetch('/api/stories');
+        if (!response.ok) {
+          if (response.status === 401) {
+            setStories([]);
+            return;
+          }
+          throw new Error('Failed to fetch stories');
+        }
+        const data = await response.json();
+        setStories(data.stories || []);
+      } catch (err) {
+        console.error('Error fetching stories:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStories();
   }, []);
 
   const getStoriesForChapter = (chapterId: ChapterType) => {
@@ -127,7 +98,9 @@ export default function LifeBookPage() {
             part of your journey.
           </p>
           <div className="mt-4 inline-flex items-center gap-2 bg-ember-gradient/10 px-4 py-2 rounded-full">
-            <span className="text-ember-orange font-semibold">{totalStories}</span>
+            <span className="text-ember-orange font-semibold">
+              {isLoading ? '...' : totalStories}
+            </span>
             <span className="text-gray-600">
               {totalStories === 1 ? 'story' : 'stories'} preserved
             </span>
@@ -251,10 +224,10 @@ export default function LifeBookPage() {
                           className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
                         >
                           <h4 className="font-semibold text-lg mb-2">{story.title}</h4>
-                          <p className="text-gray-600 line-clamp-2 mb-3">{story.content}</p>
+                          <p className="text-gray-600 line-clamp-2 mb-3">{story.narrative_prose || story.content}</p>
                           <div className="flex items-center justify-between">
                             <div className="flex gap-2">
-                              {story.tags.slice(0, 3).map((tag) => (
+                              {(story.tags || []).slice(0, 3).map((tag) => (
                                 <span
                                   key={tag}
                                   className="px-2 py-0.5 bg-white rounded-full text-xs text-gray-500"
@@ -264,7 +237,7 @@ export default function LifeBookPage() {
                               ))}
                             </div>
                             <span className="text-xs text-gray-400">
-                              {new Date(story.createdAt).toLocaleDateString()}
+                              {new Date(story.created_at).toLocaleDateString()}
                             </span>
                           </div>
                         </div>
