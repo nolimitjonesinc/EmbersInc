@@ -1,26 +1,180 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Embers Brand Colors */
+  --ember-orange: #E86D48;
+  --ember-red: #D64545;
+  --ember-gold: #F5A623;
+  --ember-brown: #8B5E3C;
+
+  /* UI Colors */
+  --background: #FFFAF5;
+  --foreground: #2C3E50;
+  --surface: #FFFFFF;
+  --muted: #7F8C8D;
+  --border: #E5E5E5;
+
+  /* Semantic Colors */
+  --success: #27AE60;
+  --warning: #F5A623;
+  --error: #E74C3C;
+  --info: #5DADE2;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ember-orange: var(--ember-orange);
+  --color-ember-red: var(--ember-red);
+  --color-ember-gold: var(--ember-gold);
+  --color-ember-brown: var(--ember-brown);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted);
+  --color-border: var(--border);
+  --color-ring: var(--ember-orange);
+  --color-card-foreground: var(--foreground);
+  --color-secondary: #F8F9FA;
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: #F8F9FA;
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--error);
+  --color-destructive-foreground: #FFFFFF;
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Light mode only - no dark mode for accessibility/senior users */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Large, readable text for seniors */
+html {
+  font-size: 18px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 20px;
+  }
+}
+
+/* Ensure good tap targets for accessibility */
+button,
+a,
+input,
+select,
+textarea {
+  min-height: 44px;
+}
+
+/* Focus states for accessibility */
+*:focus-visible {
+  outline: 3px solid var(--ember-orange);
+  outline-offset: 2px;
+}
+
+/* Selection color */
+::selection {
+  background: var(--ember-orange);
+  color: white;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ember gradient backgrounds */
+.bg-ember-gradient {
+  background: linear-gradient(135deg, var(--ember-orange) 0%, var(--ember-red) 100%);
+}
+
+.bg-ember-gradient-subtle {
+  background: linear-gradient(135deg, rgba(232, 109, 72, 0.1) 0%, rgba(214, 69, 69, 0.1) 100%);
+}
+
+/* Text gradient for headings */
+.text-ember-gradient {
+  background: linear-gradient(135deg, var(--ember-orange) 0%, var(--ember-red) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animations */
+@keyframes pulse-ember {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-pulse-ember {
+  animation: pulse-ember 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Voice recording animation */
+@keyframes voice-wave {
+  0%, 100% {
+    height: 20%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+.voice-bar {
+  animation: voice-wave 1s ease-in-out infinite;
+}
+
+.voice-bar:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.voice-bar:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.voice-bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+.voice-bar:nth-child(5) {
+  animation-delay: 0.4s;
 }
