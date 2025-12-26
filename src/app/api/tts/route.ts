@@ -99,21 +99,31 @@ export async function POST(request: NextRequest) {
     let audioBuffer: ArrayBuffer;
     let usedProvider: string;
 
-    // Try Amazon Polly first (unless OpenAI specifically requested)
-    if (provider !== 'openai' && getPollyClient()) {
+    // Use OpenAI as primary (unless Polly specifically requested)
+    if (provider === 'polly' && getPollyClient()) {
       try {
         audioBuffer = await generateWithPolly(truncatedText);
         usedProvider = 'polly';
       } catch (pollyError) {
         console.error('Polly TTS failed, falling back to OpenAI:', pollyError);
-        // Fall back to OpenAI
         audioBuffer = await generateWithOpenAI(truncatedText);
         usedProvider = 'openai';
       }
     } else {
-      // Use OpenAI directly
-      audioBuffer = await generateWithOpenAI(truncatedText);
-      usedProvider = 'openai';
+      // Use OpenAI as default
+      try {
+        audioBuffer = await generateWithOpenAI(truncatedText);
+        usedProvider = 'openai';
+      } catch (openaiError) {
+        // Fall back to Polly if configured and OpenAI fails
+        if (getPollyClient()) {
+          console.error('OpenAI TTS failed, falling back to Polly:', openaiError);
+          audioBuffer = await generateWithPolly(truncatedText);
+          usedProvider = 'polly';
+        } else {
+          throw openaiError;
+        }
+      }
     }
 
     // Return the audio file
