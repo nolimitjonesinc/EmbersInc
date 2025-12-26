@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOpenAIClient, SYSTEM_PROMPT } from '@/lib/openai/client';
+import { getOpenAIClient } from '@/lib/openai/client';
+import { getPersonaPrompt, getPersona, DEFAULT_PERSONA } from '@/lib/personas/definitions';
 import { Message, ChatResponse, ChapterType } from '@/types';
 
 export const runtime = 'edge';
@@ -8,17 +9,34 @@ interface ChatRequestBody {
   messages: Message[];
   userName?: string;
   isFirstMessage?: boolean;
+  persona?: string;
+}
+
+// Generate persona-specific greeting
+function getPersonaGreeting(personaId: string, userName: string): string {
+  const greetings: Record<string, string> = {
+    ember: `Hello ${userName}, I'm Ember. I'm so glad you're here to share your stories. There's no right or wrong way to do this - just speak naturally, like we're having a conversation over coffee. Take your time, and share whatever comes to mind.`,
+    rose: `Hello, sweetheart! I'm Rose, and I'm so delighted to meet you, ${userName}. Pull up a chair and let's have a nice chat. I'd love to hear about your life - there's nothing more precious than our memories.`,
+    emma: `Hi ${userName}! I'm Emma, and I'm SO excited to hear your stories! I bet you've seen so many amazing things. I want to know everything - where do you want to start?`,
+    marcus: `Good day, ${userName}. I'm Marcus, and I'm honored to help document your life stories. Every personal history is a window into our shared past. What period of your life shall we explore first?`,
+    sam: `Hey ${userName}! I'm Sam. So glad we get to hang out and swap stories. No pressure here - just tell me whatever's on your mind. What's a good memory you've been thinking about lately?`,
+  }
+  return greetings[personaId] || greetings.ember
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: ChatRequestBody = await request.json();
-    const { messages, userName = 'friend', isFirstMessage = false } = body;
+    const { messages, userName = 'friend', isFirstMessage = false, persona = DEFAULT_PERSONA } = body;
+
+    // Get persona-specific prompt
+    const personaData = getPersona(persona);
+    const systemPrompt = getPersonaPrompt(persona, userName);
 
     // Build the conversation history for OpenAI
     const systemMessage = {
       role: 'system' as const,
-      content: SYSTEM_PROMPT.replace(/\{userName\}/g, userName),
+      content: systemPrompt,
     };
 
     // Convert our messages to OpenAI format
@@ -27,11 +45,12 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
-    // If first message, add a warm greeting context
+    // If first message, add a warm greeting context based on persona
     if (isFirstMessage && conversationHistory.length === 1) {
+      const greetingContent = getPersonaGreeting(personaData.id, userName);
       conversationHistory.unshift({
         role: 'assistant',
-        content: `Hello ${userName}, I'm Ember. I'm so glad you're here to share your stories. There's no right or wrong way to do this - just speak naturally, like we're having a conversation over coffee. Take your time, and share whatever comes to mind.`,
+        content: greetingContent,
       });
     }
 
