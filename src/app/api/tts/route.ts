@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai } from '@/lib/openai/client';
+import { getOpenAIClient } from '@/lib/openai/client';
 
 export const runtime = 'edge';
 
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     // Limit text length for TTS
     const truncatedText = text.slice(0, 4000);
 
+    const openai = getOpenAIClient();
     const response = await openai.audio.speech.create({
       model: 'tts-1',
       voice: voice,

@@ -1,9 +1,16 @@
 import OpenAI from 'openai';
 
-// Server-side OpenAI client
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI client to avoid build-time errors
+let _openai: OpenAI | null = null;
+
+export function getOpenAIClient(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return _openai;
+}
 
 // System prompt for the AI conversation partner
 export const SYSTEM_PROMPT = `You are a warm, empathetic conversation partner helping someone preserve their life stories for their family. Your name is Ember.

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai, SYSTEM_PROMPT } from '@/lib/openai/client';
+import { getOpenAIClient, SYSTEM_PROMPT } from '@/lib/openai/client';
 import { Message, ChatResponse, ChapterType } from '@/types';
 
 export const runtime = 'edge';
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [systemMessage, ...conversationHistory],
