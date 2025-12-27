@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AmbientFire } from '@/components/conversation/AmbientFire';
+import { FlameButton } from '@/components/conversation/FlameButton';
 
 export default function Home() {
   return (
@@ -68,9 +68,11 @@ export default function Home() {
       {/* Hero Section */}
       <main className="relative">
         <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16">
-          {/* The Ambient Fire - Central Focus */}
-          <div className="relative mb-12">
-            <AmbientFire size="large" />
+          {/* The Flame - Central Focus */}
+          <div className="relative mb-8">
+            <Link href="/conversation">
+              <FlameButton size="large" />
+            </Link>
           </div>
 
           {/* Headline */}
