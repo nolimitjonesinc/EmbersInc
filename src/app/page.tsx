@@ -1,199 +1,255 @@
+'use client';
+
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-[#1a1714] text-[#f9f7f2] overflow-hidden">
+      {/* Grain overlay */}
+      <div className="fixed inset-0 pointer-events-none z-50 opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`
+        }}
+      />
+
+      {/* Warm ambient glow from top */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center top, rgba(232, 109, 72, 0.15) 0%, transparent 70%)',
+        }}
+      />
+
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-3xl">🔥</span>
-            <span className="text-2xl font-bold text-ember-gradient">Embers</span>
+      <nav className="fixed top-0 left-0 right-0 z-40 bg-[#1a1714]/80 backdrop-blur-md border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3">
+            <span
+              className="w-4 h-4 rounded-full animate-pulse"
+              style={{
+                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: '0 0 20px 5px rgba(232, 109, 72, 0.4)',
+              }}
+            />
+            <span className="text-2xl font-serif tracking-wide">Embers</span>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-8">
+            <Link
+              href="/stories"
+              className="text-[#f9f7f2]/60 hover:text-[#f9f7f2] transition-colors text-sm tracking-wide hidden sm:block"
+            >
+              Stories
+            </Link>
+            <Link
+              href="/life-book"
+              className="text-[#f9f7f2]/60 hover:text-[#f9f7f2] transition-colors text-sm tracking-wide hidden sm:block"
+            >
+              Life Book
+            </Link>
             <Link
               href="/conversation"
-              className="text-gray-600 hover:text-ember-orange transition-colors hidden sm:block"
+              className="px-5 py-2.5 rounded-full text-sm tracking-wide transition-all border border-[#E86D48]/30 hover:border-[#E86D48] hover:bg-[#E86D48]/10"
             >
-              Start Talking
+              Begin
             </Link>
-            <Button asChild size="sm">
-              <Link href="/onboarding">Get Started</Link>
-            </Button>
           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <main className="flex-1 pt-24">
-        <section className="max-w-6xl mx-auto px-6 py-16 md:py-24">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-8">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
-                Share Your{' '}
-                <span className="text-ember-gradient">Family Stories</span>
-              </h1>
-              <p className="text-xl text-gray-600 leading-relaxed">
-                Preserve your memories for generations. Just speak naturally, and
-                Embers will guide you through sharing your life stories with your
-                family.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button asChild size="lg">
-                  <Link href="/onboarding">Start Your Story</Link>
-                </Button>
-                <Button asChild variant="outline" size="lg">
-                  <Link href="#how-it-works">See How It Works</Link>
-                </Button>
-              </div>
-              <p className="text-sm text-gray-500">
-                No account needed. Just start talking.
-              </p>
-            </div>
-            <div className="relative">
-              <div className="bg-ember-gradient-subtle rounded-3xl p-8 aspect-square flex items-center justify-center">
-                <div className="text-center space-y-6">
-                  <div className="text-8xl animate-float">🔥</div>
-                  <p className="text-lg text-gray-600 italic">
-                    &ldquo;Every story you share is a gift to future generations&rdquo;
-                  </p>
-                </div>
-              </div>
-            </div>
+      <main className="relative">
+        <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16">
+          {/* The Ember - Central Focus */}
+          <div className="relative w-48 h-48 mb-16">
+            {/* Outer glow rings */}
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full opacity-20"
+              style={{
+                background: 'radial-gradient(circle, rgba(232, 109, 72, 0.3) 0%, transparent 70%)',
+                animation: 'pulse 4s ease-in-out infinite',
+              }}
+            />
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full opacity-30"
+              style={{
+                background: 'radial-gradient(circle, rgba(232, 109, 72, 0.4) 0%, transparent 70%)',
+                animation: 'pulse 4s ease-in-out infinite 1s',
+              }}
+            />
+            {/* The core ember */}
+            <span
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full"
+              style={{
+                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: `
+                  0 0 60px 20px rgba(232, 109, 72, 0.5),
+                  0 0 120px 40px rgba(232, 109, 72, 0.25),
+                  0 0 180px 60px rgba(232, 109, 72, 0.1)
+                `,
+                animation: 'ember-glow 5s ease-in-out infinite',
+              }}
+            />
           </div>
-        </section>
 
-        {/* How It Works */}
-        <section id="how-it-works" className="bg-white py-16 md:py-24">
-          <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-              As Easy as Having a{' '}
-              <span className="text-ember-gradient">Conversation</span>
-            </h2>
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                {
-                  icon: '🎙️',
-                  title: 'Just Talk',
-                  description:
-                    'Press the button and speak naturally. Share memories like you\'re talking to a friend.',
-                },
-                {
-                  icon: '💬',
-                  title: 'We Listen & Ask',
-                  description:
-                    'Our AI companion asks thoughtful follow-up questions to help you remember more.',
-                },
-                {
-                  icon: '📖',
-                  title: 'Your Story Grows',
-                  description:
-                    'Your stories are organized into a beautiful Life Book to share with family.',
-                },
-              ].map((step, index) => (
-                <div
-                  key={index}
-                  className="text-center p-8 rounded-2xl bg-background hover:shadow-lg transition-shadow"
-                >
-                  <div className="text-5xl mb-6">{step.icon}</div>
-                  <h3 className="text-xl font-semibold mb-4">{step.title}</h3>
-                  <p className="text-gray-600">{step.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Life Book Chapters */}
-        <section className="py-16 md:py-24">
-          <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-6">
-              Your <span className="text-ember-gradient">Life Book</span>
-            </h2>
-            <p className="text-xl text-gray-600 text-center max-w-2xl mx-auto mb-16">
-              Stories are organized into meaningful chapters that capture the
-              essence of your life.
+          {/* Headline */}
+          <div className="text-center max-w-3xl mx-auto space-y-8">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif leading-tight tracking-tight">
+              Your stories deserve to live forever
+            </h1>
+            <p className="text-xl md:text-2xl text-[#f9f7f2]/60 font-light leading-relaxed max-w-2xl mx-auto">
+              Speak your memories. Let them become gifts for those you love—across time, across generations.
             </p>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { icon: '🌟', title: 'Who I Am', color: 'bg-orange-50' },
-                { icon: '🏡', title: 'Where I Come From', color: 'bg-amber-50' },
-                { icon: '❤️', title: "What I've Loved", color: 'bg-red-50' },
-                { icon: '📚', title: "What I've Learned", color: 'bg-blue-50' },
-                { icon: '🌧️', title: "What's Been Hard", color: 'bg-gray-50' },
-                { icon: '🔮', title: "Still Figuring Out", color: 'bg-purple-50' },
-                { icon: '💌', title: 'What I Want You to Know', color: 'bg-yellow-50' },
-              ].map((chapter, index) => (
-                <div
-                  key={index}
-                  className={`${chapter.color} rounded-2xl p-6 hover:scale-105 transition-transform cursor-pointer`}
-                >
-                  <div className="text-3xl mb-3">{chapter.icon}</div>
-                  <h3 className="font-semibold text-gray-800">{chapter.title}</h3>
-                </div>
-              ))}
-            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="mt-16 flex flex-col items-center gap-6">
+            <Link
+              href="/conversation"
+              className="group relative px-10 py-4 rounded-full text-lg tracking-wide transition-all overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',
+                boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)',
+              }}
+            >
+              <span className="relative z-10">Start Sharing</span>
+              <span className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </Link>
+            <p className="text-sm text-[#f9f7f2]/40">
+              No account needed. Just your voice and your memories.
+            </p>
+          </div>
+
+          {/* Scroll indicator */}
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 text-[#f9f7f2]/30">
+            <span className="text-xs tracking-widest uppercase">Discover</span>
+            <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
           </div>
         </section>
 
-        {/* Testimonial / Example */}
-        <section className="bg-ember-gradient text-white py-16 md:py-24">
-          <div className="max-w-4xl mx-auto px-6 text-center">
-            <div className="text-6xl mb-8">✨</div>
-            <blockquote className="text-2xl md:text-3xl font-light italic leading-relaxed mb-8">
-              &ldquo;It was Christmas 1952, and we had this beautiful pine tree
-              that barely fit through the door. The star on top was bent from
-              where it hit the ceiling, but Mom said it looked like it was
-              winking at us...&rdquo;
+        {/* The Story Quote Section */}
+        <section className="py-32 px-6 relative">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#E86D48]/5 to-transparent" />
+          <div className="max-w-4xl mx-auto text-center relative">
+            <div className="text-[#E86D48]/60 text-6xl mb-8 font-serif">&ldquo;</div>
+            <blockquote className="text-2xl md:text-3xl lg:text-4xl font-serif leading-relaxed text-[#f9f7f2]/90 mb-8">
+              It was Christmas 1952, and we had this beautiful pine tree that barely fit through the door.
+              The star on top was bent from where it hit the ceiling, but Mom said it looked like it was winking at us...
             </blockquote>
-            <p className="text-lg opacity-90">
-              — A story preserved for generations
+            <p className="text-[#f9f7f2]/40 font-light italic">
+              A memory preserved forever
             </p>
           </div>
         </section>
 
-        {/* Features for Seniors */}
-        <section className="py-16 md:py-24 bg-white">
-          <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-              Designed for <span className="text-ember-gradient">Everyone</span>
+        {/* How It Works - Minimal */}
+        <section className="py-32 px-6">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-serif text-center mb-20">
+              As natural as a conversation
             </h2>
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-3 gap-16">
               {[
                 {
-                  icon: '🗣️',
-                  title: 'Voice First',
-                  description:
-                    'No typing required. Just press the big button and talk naturally.',
+                  step: '01',
+                  title: 'Speak',
+                  description: 'Press the ember and talk naturally. Share whatever comes to mind—a memory, a feeling, a moment.',
                 },
                 {
-                  icon: '👁️',
-                  title: 'Large, Clear Text',
-                  description:
-                    'Easy to read on any device with high contrast and big buttons.',
+                  step: '02',
+                  title: 'Listen',
+                  description: 'A patient companion asks gentle questions, helping you remember details you thought were lost.',
                 },
                 {
-                  icon: '🤝',
-                  title: 'Patient & Kind',
-                  description:
-                    'Take your time. There\'s no rush. Pause whenever you need.',
+                  step: '03',
+                  title: 'Preserve',
+                  description: 'Your stories become part of your Life Book—organized, searchable, ready to share with those you love.',
                 },
-                {
-                  icon: '👨‍👩‍👧‍👦',
-                  title: 'Family Sharing',
-                  description:
-                    'Easily share stories with family members via a simple link.',
-                },
-              ].map((feature, index) => (
+              ].map((item) => (
+                <div key={item.step} className="text-center">
+                  <div className="text-[#E86D48]/30 text-5xl font-light mb-6">{item.step}</div>
+                  <h3 className="text-xl font-serif mb-4">{item.title}</h3>
+                  <p className="text-[#f9f7f2]/50 leading-relaxed">{item.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* The Life Book Preview */}
+        <section className="py-32 px-6 bg-[#141210]">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-20">
+              <h2 className="text-3xl md:text-4xl font-serif mb-6">
+                Your Life Book
+              </h2>
+              <p className="text-[#f9f7f2]/50 text-lg max-w-2xl mx-auto">
+                Every story finds its place in seven meaningful chapters—the architecture of a life.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { icon: '🌟', title: 'Who I Am', color: '#E86D48' },
+                { icon: '🏡', title: 'Where I Come From', color: '#8B5E3C' },
+                { icon: '❤️', title: "What I've Loved", color: '#D64545' },
+                { icon: '📚', title: "What I've Learned", color: '#5DADE2' },
+                { icon: '🌧️', title: "What's Been Hard", color: '#5D6D7E' },
+                { icon: '🔮', title: "Still Figuring Out", color: '#9B59B6' },
+                { icon: '💌', title: 'What I Want You to Know', color: '#F5A623' },
+              ].map((chapter) => (
                 <div
-                  key={index}
-                  className="flex gap-6 p-6 rounded-2xl bg-background"
+                  key={chapter.title}
+                  className="p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all group cursor-pointer"
+                  style={{
+                    background: `linear-gradient(135deg, ${chapter.color}08 0%, transparent 100%)`,
+                  }}
                 >
-                  <div className="text-4xl">{feature.icon}</div>
+                  <div className="text-3xl mb-3 group-hover:scale-110 transition-transform">{chapter.icon}</div>
+                  <h3 className="text-sm font-medium text-[#f9f7f2]/80">{chapter.title}</h3>
+                </div>
+              ))}
+              <Link
+                href="/life-book"
+                className="p-6 rounded-2xl border border-dashed border-white/10 hover:border-[#E86D48]/50 transition-all flex items-center justify-center group"
+              >
+                <span className="text-[#f9f7f2]/40 group-hover:text-[#E86D48] transition-colors text-sm">
+                  Explore →
+                </span>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Designed for Everyone */}
+        <section className="py-32 px-6">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-serif text-center mb-20">
+              Designed with care
+            </h2>
+            <div className="grid md:grid-cols-2 gap-12">
+              {[
+                {
+                  title: 'Voice first',
+                  description: 'No typing required. Just speak naturally, like talking to an old friend.',
+                },
+                {
+                  title: 'Patient and kind',
+                  description: 'Take all the time you need. Pause, think, remember. There is no rush here.',
+                },
+                {
+                  title: 'Clear and readable',
+                  description: 'Large text, high contrast, intuitive flow. Designed for comfort.',
+                },
+                {
+                  title: 'Private and secure',
+                  description: 'Your stories are yours. Share only what you choose, with whom you choose.',
+                },
+              ].map((feature) => (
+                <div key={feature.title} className="flex gap-5">
+                  <div className="w-px bg-gradient-to-b from-[#E86D48] to-transparent flex-shrink-0" />
                   <div>
-                    <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                    <p className="text-gray-600">{feature.description}</p>
+                    <h3 className="text-lg font-medium mb-2">{feature.title}</h3>
+                    <p className="text-[#f9f7f2]/50 leading-relaxed">{feature.description}</p>
                   </div>
                 </div>
               ))}
@@ -201,48 +257,85 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="py-16 md:py-24">
-          <div className="max-w-4xl mx-auto px-6 text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Ready to Share Your Story?
+        {/* Final CTA */}
+        <section className="py-32 px-6 relative">
+          <div className="absolute inset-0 bg-gradient-to-t from-[#E86D48]/10 to-transparent" />
+          <div className="max-w-3xl mx-auto text-center relative">
+            {/* Small ember */}
+            <div className="w-16 h-16 mx-auto mb-12 relative">
+              <span
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full"
+                style={{
+                  background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                  boxShadow: '0 0 40px 10px rgba(232, 109, 72, 0.4)',
+                }}
+              />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-serif mb-6">
+              Your family is waiting to hear your story
             </h2>
-            <p className="text-xl text-gray-600 mb-8">
-              Your family is waiting to hear your memories. Start preserving them
-              today.
+            <p className="text-[#f9f7f2]/50 text-lg mb-12">
+              Every memory you share becomes a gift that transcends time.
             </p>
-            <Button asChild size="xl">
-              <Link href="/onboarding">Start Talking Now</Link>
-            </Button>
+            <Link
+              href="/conversation"
+              className="inline-block px-12 py-5 rounded-full text-lg tracking-wide transition-all"
+              style={{
+                background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',
+                boxShadow: '0 0 40px rgba(232, 109, 72, 0.35)',
+              }}
+            >
+              Begin Your Story
+            </Link>
           </div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🔥</span>
-              <span className="text-xl font-bold">Embers</span>
-            </div>
-            <p className="text-gray-400 text-sm">
-              © {new Date().getFullYear()} Embers Inc. All rights reserved.
-            </p>
-            <div className="flex gap-6 text-sm text-gray-400">
-              <Link href="/privacy" className="hover:text-white transition-colors">
-                Privacy
-              </Link>
-              <Link href="/terms" className="hover:text-white transition-colors">
-                Terms
-              </Link>
-              <Link href="/contact" className="hover:text-white transition-colors">
-                Contact
-              </Link>
-            </div>
+      <footer className="border-t border-white/5 py-12 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span
+              className="w-3 h-3 rounded-full"
+              style={{
+                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: '0 0 10px 3px rgba(232, 109, 72, 0.3)',
+              }}
+            />
+            <span className="font-serif text-lg">Embers</span>
+          </div>
+          <p className="text-[#f9f7f2]/30 text-sm">
+            © {new Date().getFullYear()} Embers Inc. Preserving stories for generations.
+          </p>
+          <div className="flex gap-8 text-sm text-[#f9f7f2]/30">
+            <Link href="/privacy" className="hover:text-[#f9f7f2]/60 transition-colors">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-[#f9f7f2]/60 transition-colors">
+              Terms
+            </Link>
           </div>
         </div>
       </footer>
+
+      <style jsx>{`
+        @keyframes ember-glow {
+          0%, 100% {
+            transform: translate(-50%, -50%) scale(1);
+            box-shadow:
+              0 0 60px 20px rgba(232, 109, 72, 0.5),
+              0 0 120px 40px rgba(232, 109, 72, 0.25),
+              0 0 180px 60px rgba(232, 109, 72, 0.1);
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow:
+              0 0 80px 30px rgba(232, 109, 72, 0.6),
+              0 0 150px 50px rgba(232, 109, 72, 0.3),
+              0 0 200px 70px rgba(232, 109, 72, 0.15);
+          }
+        }
+      `}</style>
     </div>
   );
 }

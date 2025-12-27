@@ -8,7 +8,7 @@ import { SessionEnding } from '@/components/conversation/SessionEnding';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { Message } from '@/types';
 import { getStarterPrompts } from '@/lib/utils/chapters';
-import { PERSONAS, DEFAULT_PERSONA, getPersona } from '@/lib/personas/definitions';
+import { getPersona, DEFAULT_PERSONA } from '@/lib/personas/definitions';
 
 export default function ConversationPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -17,9 +17,7 @@ export default function ConversationPage() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isWaitingForUser, setIsWaitingForUser] = useState(false);
   const [userName, setUserName] = useState('');
-  const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState(DEFAULT_PERSONA);
   const [isSaving, setIsSaving] = useState(false);
   const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
   const [showSessionEnding, setShowSessionEnding] = useState(false);
@@ -30,6 +28,15 @@ export default function ConversationPage() {
 
   // Get a starter prompt for the first message
   const [starterPrompt] = useState(() => getStarterPrompts()[0]);
+  const persona = getPersona(DEFAULT_PERSONA);
+
+  // Load stored name on mount
+  useEffect(() => {
+    const storedName = localStorage.getItem('embers_user_name');
+    if (storedName) {
+      setUserName(storedName);
+    }
+  }, []);
 
   // Handle extended silence - show "Take your time" after 8 seconds
   const startSilenceTimer = useCallback(() => {
@@ -93,6 +100,29 @@ export default function ConversationPage() {
     }
   }, [speechError]);
 
+  // Extract name from conversation if AI asks and user responds
+  useEffect(() => {
+    if (messages.length >= 2) {
+      const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+      const previousAssistantMessage = messages[messages.length - 2];
+
+      // Check if AI just asked for name and user responded
+      if (previousAssistantMessage?.role === 'assistant' &&
+          previousAssistantMessage.content.toLowerCase().includes('what') &&
+          previousAssistantMessage.content.toLowerCase().includes('name') &&
+          lastUserMessage?.role === 'user') {
+        // Try to extract name from response like "I'm Margaret" or "My name is Margaret" or just "Margaret"
+        const nameMatch = lastUserMessage.content.match(/(?:i'm|i am|my name is|call me|it's|its)\s+(\w+)/i) ||
+                         lastUserMessage.content.match(/^(\w+)$/i);
+        if (nameMatch && nameMatch[1]) {
+          const extractedName = nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1).toLowerCase();
+          setUserName(extractedName);
+          localStorage.setItem('embers_user_name', extractedName);
+        }
+      }
+    }
+  }, [messages]);
+
   // Send message to API
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isProcessing) return;
@@ -118,7 +148,7 @@ export default function ConversationPage() {
           messages: [...messages, userMessage],
           userName,
           isFirstMessage: messages.length === 0,
-          persona: selectedPersona,
+          persona: DEFAULT_PERSONA,
         }),
       });
 
@@ -211,19 +241,6 @@ export default function ConversationPage() {
     }
   };
 
-  // Handle name submission
-  const handleNameSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (userName.trim()) {
-      setShowNamePrompt(false);
-      // Store name for other pages
-      localStorage.setItem('embers_user_name', userName);
-      // Send initial greeting
-      const greeting = `Hi, my name is ${userName}.`;
-      handleSendMessage(greeting);
-    }
-  };
-
   // Save story and show ceremonial ending
   const handleSaveStory = async () => {
     if (messages.length < 2) {
@@ -288,101 +305,6 @@ export default function ConversationPage() {
     );
   }
 
-  // Name prompt screen - dark themed
-  if (showNamePrompt) {
-    return (
-      <div className="min-h-screen recording-environment flex flex-col items-center justify-center p-6 relative">
-        {/* Grain overlay */}
-        <div className="recording-grain" />
-        {/* Vignette */}
-        <div className="recording-vignette" />
-
-        {/* Particles */}
-        <EmberParticles isActive intensity="low" />
-
-        <div className="max-w-md w-full text-center space-y-10 relative z-10">
-          {/* Ember */}
-          <div className="relative w-32 h-32 mx-auto">
-            <span
-              className="absolute top-1/2 left-1/2 w-9 h-9 rounded-full animate-ember-breathe"
-              style={{
-                background:
-                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                boxShadow: `
-                  0 0 40px 15px rgba(232, 109, 72, 0.5),
-                  0 0 80px 30px rgba(232, 109, 72, 0.2)
-                `,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-          </div>
-
-          <div className="space-y-4 animate-fade-up-delay-1">
-            <h1 className="recording-greeting">Welcome to Embers</h1>
-            <p className="recording-prompt">
-              I&apos;m excited to hear your stories. What should I call you?
-            </p>
-          </div>
-
-          <form onSubmit={handleNameSubmit} className="space-y-8 animate-fade-up-delay-2">
-            <input
-              type="text"
-              placeholder="Your name"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="w-full bg-transparent border-b border-text-whisper text-center text-2xl font-serif text-text-warm placeholder:text-text-whisper py-3 focus:outline-none focus:border-ember-orange transition-colors"
-              autoFocus
-            />
-
-            {/* Persona selector - subtle */}
-            <div className="space-y-4">
-              <p className="text-sm text-text-whisper">Who would you like to talk with?</p>
-              <div className="grid grid-cols-2 gap-3">
-                {Object.entries(PERSONAS).map(([key, persona]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSelectedPersona(key)}
-                    className={`p-4 rounded-xl border transition-all text-left ${
-                      selectedPersona === key
-                        ? 'border-ember-orange/50 bg-ember-orange/10'
-                        : 'border-text-whisper/20 hover:border-text-whisper/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{persona.avatar}</span>
-                      <span className="font-medium text-sm text-text-warm">
-                        {persona.name}
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-whisper mt-1">{persona.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={!userName.trim()}
-              className="recording-btn-finish w-full disabled:opacity-30 disabled:cursor-not-allowed hover:bg-ember-orange/10"
-            >
-              Let&apos;s Begin
-            </button>
-          </form>
-
-          <Link
-            href="/"
-            className="text-text-whisper hover:text-text-soft transition-colors text-sm animate-fade-up-delay-3"
-          >
-            ← Back to home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const currentPersona = getPersona(selectedPersona);
-
   return (
     <div className="min-h-screen flex flex-col recording-environment relative">
       {/* Grain overlay */}
@@ -391,7 +313,7 @@ export default function ConversationPage() {
       <div className="recording-vignette" />
 
       {/* Particles - more active when listening */}
-      <EmberParticles isActive={isListening} intensity={isListening ? 'medium' : 'low'} />
+      <EmberParticles isActive={isListening || messages.length === 0} intensity={isListening ? 'medium' : 'low'} />
 
       {/* Header - minimal, transparent */}
       <header className="sticky top-0 z-50 bg-recording-bg/80 backdrop-blur-md border-b border-white/5">
@@ -400,8 +322,7 @@ export default function ConversationPage() {
             <span
               className="w-3 h-3 rounded-full"
               style={{
-                background:
-                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
                 boxShadow: '0 0 10px 3px rgba(232, 109, 72, 0.4)',
               }}
             />
@@ -411,8 +332,8 @@ export default function ConversationPage() {
           </Link>
           <div className="flex items-center gap-3">
             <span className="text-text-whisper text-sm hidden sm:inline">
-              <span className="mr-1">{currentPersona.avatar}</span>
-              {currentPersona.name}
+              <span className="mr-1">{persona.avatar}</span>
+              {persona.name}
             </span>
             {messages.length >= 2 && !savedStoryId && (
               <button
@@ -451,7 +372,9 @@ export default function ConversationPage() {
               </div>
 
               <div className="space-y-4 animate-fade-up-delay-1">
-                <p className="recording-greeting">I&apos;m listening, {userName}.</p>
+                <p className="recording-greeting">
+                  {userName ? `Welcome back, ${userName}.` : "Hello. I'm here to listen."}
+                </p>
                 <p className="recording-prompt">{starterPrompt}</p>
               </div>
 
@@ -470,9 +393,7 @@ export default function ConversationPage() {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
                     className={`max-w-[85%] md:max-w-[75%] rounded-2xl px-6 py-4 ${
@@ -507,8 +428,7 @@ export default function ConversationPage() {
                       <span
                         className="w-3 h-3 rounded-full animate-pulse"
                         style={{
-                          background:
-                            'radial-gradient(circle, #f4a574, #E86D48)',
+                          background: 'radial-gradient(circle, #f4a574, #E86D48)',
                           boxShadow: '0 0 8px 2px rgba(232, 109, 72, 0.4)',
                         }}
                       />
@@ -531,43 +451,41 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Voice controls - always visible once conversation starts */}
-      {(messages.length > 0 || isListening || isProcessing) && (
-        <footer className="sticky bottom-0 bg-recording-bg/90 backdrop-blur-md border-t border-white/5 relative z-20">
-          <div className="max-w-3xl mx-auto px-4 py-6">
-            {/* Centered ember button */}
-            <div className="flex flex-col items-center mb-6">
-              <BreathingEmber
-                isListening={isListening}
-                isProcessing={isProcessing}
-                isSpeaking={isSpeaking}
-                isWaiting={isWaitingForUser}
-                onClick={handleVoiceToggle}
-                disabled={!isSupported || isSpeaking || isProcessing}
-              />
-            </div>
-
-            {/* Text input fallback - subtle */}
-            <form onSubmit={handleTextSubmit} className="flex gap-3">
-              <input
-                type="text"
-                placeholder="Or type here..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                disabled={isProcessing}
-                className="flex-1 bg-transparent border border-text-whisper/30 rounded-full px-5 py-3 text-text-warm placeholder:text-text-whisper focus:outline-none focus:border-ember-orange/50 transition-colors"
-              />
-              <button
-                type="submit"
-                disabled={isProcessing || !inputText.trim()}
-                className="recording-btn-finish px-6 disabled:opacity-30"
-              >
-                Send
-              </button>
-            </form>
+      {/* Voice controls - always visible */}
+      <footer className="sticky bottom-0 bg-recording-bg/90 backdrop-blur-md border-t border-white/5 relative z-20">
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          {/* Centered ember button */}
+          <div className="flex flex-col items-center mb-6">
+            <BreathingEmber
+              isListening={isListening}
+              isProcessing={isProcessing}
+              isSpeaking={isSpeaking}
+              isWaiting={isWaitingForUser}
+              onClick={handleVoiceToggle}
+              disabled={!isSupported || isSpeaking || isProcessing}
+            />
           </div>
-        </footer>
-      )}
+
+          {/* Text input fallback - subtle */}
+          <form onSubmit={handleTextSubmit} className="flex gap-3">
+            <input
+              type="text"
+              placeholder="Or type here..."
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              disabled={isProcessing}
+              className="flex-1 bg-transparent border border-text-whisper/30 rounded-full px-5 py-3 text-text-warm placeholder:text-text-whisper focus:outline-none focus:border-ember-orange/50 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={isProcessing || !inputText.trim()}
+              className="recording-btn-finish px-6 disabled:opacity-30"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      </footer>
 
       {/* Hidden audio element */}
       <audio ref={audioRef} className="hidden" />
