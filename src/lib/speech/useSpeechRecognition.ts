@@ -2,10 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+// Silence stages matching iOS app behavior
+export type SilenceStage = 'none' | 'detected' | 'preparing' | 'readyToSend';
+
 interface UseSpeechRecognitionOptions {
   onResult?: (transcript: string) => void;
   onSilence?: () => void;
-  silenceTimeout?: number; // ms to wait before triggering silence
+  onSilenceStageChange?: (stage: SilenceStage, duration: number) => void;
+  silenceTimeout?: number; // ms to wait before triggering silence (auto-send)
   continuous?: boolean;
 }
 
@@ -15,12 +19,43 @@ interface SpeechRecognitionState {
   interimTranscript: string;
   error: string | null;
   isSupported: boolean;
+  silenceStage: SilenceStage;
+  silenceDuration: number; // 0 to 1 progress
+  silenceMessage: string;
+}
+
+// Silence thresholds in milliseconds (matching iOS)
+const SILENCE_THRESHOLDS = {
+  detected: 2000,    // 2 seconds - "I'm listening..."
+  preparing: 3000,   // 3 seconds - "Sending soon..."
+  readyToSend: 5000, // 5 seconds - auto-send
+};
+
+function getSilenceStage(duration: number): SilenceStage {
+  if (duration >= SILENCE_THRESHOLDS.readyToSend) return 'readyToSend';
+  if (duration >= SILENCE_THRESHOLDS.preparing) return 'preparing';
+  if (duration >= SILENCE_THRESHOLDS.detected) return 'detected';
+  return 'none';
+}
+
+function getSilenceMessage(stage: SilenceStage): string {
+  switch (stage) {
+    case 'detected':
+      return "I'm listening...";
+    case 'preparing':
+      return 'Sending soon...';
+    case 'readyToSend':
+      return 'Sending message';
+    default:
+      return '';
+  }
 }
 
 export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) {
   const {
     onResult,
     onSilence,
+    onSilenceStageChange,
     silenceTimeout = 5000,
     continuous = true,
   } = options;
@@ -31,12 +66,18 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     interimTranscript: '',
     error: null,
     isSupported: false,
+    silenceStage: 'none',
+    silenceDuration: 0,
+    silenceMessage: '',
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
   const finalTranscriptRef = useRef<string>('');
+  const lastStageRef = useRef<SilenceStage>('none');
 
   // Check for browser support
   useEffect(() => {
@@ -47,21 +88,61 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     setState((prev) => ({ ...prev, isSupported: !!SpeechRecognition }));
   }, []);
 
-  const clearSilenceTimer = useCallback(() => {
+  const clearSilenceTracking = useCallback(() => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    if (silenceIntervalRef.current) {
+      clearInterval(silenceIntervalRef.current);
+      silenceIntervalRef.current = null;
+    }
+    silenceStartRef.current = null;
+    lastStageRef.current = 'none';
+    setState((prev) => ({
+      ...prev,
+      silenceStage: 'none',
+      silenceDuration: 0,
+      silenceMessage: '',
+    }));
   }, []);
 
-  const startSilenceTimer = useCallback(() => {
-    clearSilenceTimer();
+  const startSilenceTracking = useCallback(() => {
+    clearSilenceTracking();
+    silenceStartRef.current = Date.now();
+
+    // Update silence progress every 100ms (matching iOS)
+    silenceIntervalRef.current = setInterval(() => {
+      if (!silenceStartRef.current) return;
+
+      const elapsed = Date.now() - silenceStartRef.current;
+      const progress = Math.min(elapsed / silenceTimeout, 1);
+      const stage = getSilenceStage(elapsed);
+      const message = getSilenceMessage(stage);
+
+      setState((prev) => ({
+        ...prev,
+        silenceStage: stage,
+        silenceDuration: progress,
+        silenceMessage: message,
+      }));
+
+      // Notify on stage change
+      if (stage !== lastStageRef.current) {
+        lastStageRef.current = stage;
+        if (onSilenceStageChange) {
+          onSilenceStageChange(stage, elapsed);
+        }
+      }
+    }, 100);
+
+    // Auto-send after silence timeout
     silenceTimerRef.current = setTimeout(() => {
       if (finalTranscriptRef.current && onSilence) {
         onSilence();
       }
     }, silenceTimeout);
-  }, [clearSilenceTimer, silenceTimeout, onSilence]);
+  }, [clearSilenceTracking, silenceTimeout, onSilence, onSilenceStageChange]);
 
   const startListening = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -94,6 +175,9 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         error: null,
         transcript: '',
         interimTranscript: '',
+        silenceStage: 'none',
+        silenceDuration: 0,
+        silenceMessage: '',
       }));
       finalTranscriptRef.current = '';
     };
@@ -125,14 +209,14 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         }
 
         // Reset silence timer on new speech
-        startSilenceTimer();
+        startSilenceTracking();
       } else {
         setState((prev) => ({
           ...prev,
           interimTranscript,
         }));
         // User is speaking, reset silence timer
-        startSilenceTimer();
+        startSilenceTracking();
       }
     };
 
@@ -160,7 +244,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         error: errorMessage,
         isListening: false,
       }));
-      clearSilenceTimer();
+      clearSilenceTracking();
     };
 
     recognition.onend = () => {
@@ -168,24 +252,24 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         ...prev,
         isListening: false,
       }));
-      clearSilenceTimer();
+      clearSilenceTracking();
     };
 
     recognitionRef.current = recognition;
     recognition.start();
-    startSilenceTimer();
-  }, [continuous, onResult, startSilenceTimer, clearSilenceTimer]);
+    startSilenceTracking();
+  }, [continuous, onResult, startSilenceTracking, clearSilenceTracking]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
-    clearSilenceTimer();
+    clearSilenceTracking();
     setState((prev) => ({
       ...prev,
       isListening: false,
     }));
-  }, [clearSilenceTimer]);
+  }, [clearSilenceTracking]);
 
   const resetTranscript = useCallback(() => {
     finalTranscriptRef.current = '';
@@ -202,9 +286,9 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
-      clearSilenceTimer();
+      clearSilenceTracking();
     };
-  }, [clearSilenceTimer]);
+  }, [clearSilenceTracking]);
 
   return {
     ...state,
@@ -213,4 +297,3 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     resetTranscript,
   };
 }
-

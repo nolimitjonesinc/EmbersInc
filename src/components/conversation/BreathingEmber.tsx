@@ -9,6 +9,7 @@ interface BreathingEmberProps {
   isWaiting?: boolean;
   onClick: () => void;
   disabled?: boolean;
+  stageColor?: string; // Color to override based on silence stage
 }
 
 export function BreathingEmber({
@@ -18,6 +19,7 @@ export function BreathingEmber({
   isWaiting = false,
   onClick,
   disabled,
+  stageColor,
 }: BreathingEmberProps) {
   const getState = () => {
     if (isSpeaking) return 'speaking';
@@ -82,7 +84,7 @@ export function BreathingEmber({
           className={cn(
             'absolute top-1/2 left-1/2',
             'w-9 h-9 rounded-full',
-            'transition-all duration-500',
+            'transition-all duration-300',
             state === 'idle' && 'animate-ember-breathe',
             state === 'listening' && 'animate-ember-breathe scale-110',
             state === 'waiting' && 'animate-gentle-pulse',
@@ -90,12 +92,12 @@ export function BreathingEmber({
             state === 'speaking' && 'animate-ember-breathe'
           )}
           style={{
-            background:
-              'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-            boxShadow: `
-              0 0 40px 15px rgba(232, 109, 72, 0.5),
-              0 0 80px 30px rgba(232, 109, 72, 0.2)
-            `,
+            background: stageColor
+              ? `radial-gradient(circle at 30% 30%, ${stageColor}80, ${stageColor})`
+              : 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+            boxShadow: stageColor
+              ? `0 0 40px 15px ${stageColor}80, 0 0 80px 30px ${stageColor}40`
+              : '0 0 40px 15px rgba(232, 109, 72, 0.5), 0 0 80px 30px rgba(232, 109, 72, 0.2)',
             transform: 'translate(-50%, -50%)',
           }}
         />
