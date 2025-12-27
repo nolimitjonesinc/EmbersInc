@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { AmbientFire } from '@/components/conversation/AmbientFire';
+import { FlameButton } from '@/components/conversation/FlameButton';
 import { SessionEnding } from '@/components/conversation/SessionEnding';
 import { SilenceProgressBar } from '@/components/conversation/SilenceProgressBar';
 import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
@@ -402,7 +402,7 @@ export default function ConversationPage() {
 
           {/* The fire */}
           <div className="mb-8">
-            <AmbientFire
+            <FlameButton
               isListening={isListening}
               isSpeaking={isSpeaking}
               isProcessing={isProcessing}
