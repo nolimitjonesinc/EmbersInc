@@ -17,7 +17,6 @@ interface Ember {
   y: number;
   size: number;
   duration: number;
-  delay: number;
   drift: number;
   opacity: number;
 }
@@ -38,35 +37,34 @@ export function FlameButton({
     setMounted(true);
   }, []);
 
-  // Generate random embers continuously
+  // Generate random embers continuously from wide area
   useEffect(() => {
     if (!mounted) return;
 
     const spawnEmber = () => {
       const newEmber: Ember = {
         id: emberIdRef.current++,
-        x: 30 + Math.random() * 40, // Random x position (30-70% of container)
-        y: 50 + Math.random() * 20, // Start from middle-bottom of flame
-        size: 2 + Math.random() * 4,
-        duration: 3 + Math.random() * 3, // 3-6 seconds
-        delay: 0,
-        drift: -30 + Math.random() * 60, // Random horizontal drift
-        opacity: 0.5 + Math.random() * 0.5,
+        x: 15 + Math.random() * 70, // Wider spawn area (15-85%)
+        y: 35 + Math.random() * 30, // Start from within flame area
+        size: 2 + Math.random() * 5,
+        duration: 4 + Math.random() * 4, // 4-8 seconds for longer travel
+        drift: -50 + Math.random() * 100, // Wider horizontal drift
+        opacity: 0.4 + Math.random() * 0.6,
       };
 
-      setEmbers(prev => [...prev.slice(-15), newEmber]); // Keep max 15 embers
+      setEmbers(prev => [...prev.slice(-20), newEmber]); // Keep max 20 embers
     };
 
     // Spawn embers at random intervals
     const spawnInterval = setInterval(() => {
-      if (Math.random() > 0.3) { // 70% chance to spawn
+      if (Math.random() > 0.25) { // 75% chance to spawn
         spawnEmber();
       }
-    }, 400);
+    }, 350);
 
     // Initial embers
-    for (let i = 0; i < 6; i++) {
-      setTimeout(() => spawnEmber(), i * 200);
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => spawnEmber(), i * 150);
     }
 
     return () => clearInterval(spawnInterval);
@@ -75,9 +73,9 @@ export function FlameButton({
   if (!mounted) return null;
 
   const sizeConfig = {
-    small: { scale: 0.5, width: 160, height: 220 },
-    medium: { scale: 0.75, width: 220, height: 300 },
-    large: { scale: 1, width: 300, height: 400 },
+    small: { scale: 0.5, width: 180, height: 240 },
+    medium: { scale: 0.75, width: 260, height: 340 },
+    large: { scale: 1, width: 360, height: 450 },
   };
 
   const config = sizeConfig[size];
@@ -98,29 +96,38 @@ export function FlameButton({
         }
       }}
     >
-      {/* Deep background warmth */}
+      {/* Deep background warmth - LARGER */}
       <div
-        className="absolute inset-0 transition-all duration-1000"
+        className="absolute transition-all duration-1000"
         style={{
-          background: `radial-gradient(ellipse 100% 80% at 50% 65%,
-            rgba(180, 80, 30, ${0.2 * intensity}) 0%,
-            rgba(120, 50, 20, ${0.1 * intensity}) 40%,
+          top: '-30%',
+          left: '-40%',
+          right: '-40%',
+          bottom: '-20%',
+          background: `radial-gradient(ellipse 100% 80% at 50% 60%,
+            rgba(180, 80, 30, ${0.25 * intensity}) 0%,
+            rgba(140, 60, 25, ${0.15 * intensity}) 30%,
+            rgba(100, 40, 15, ${0.08 * intensity}) 50%,
             transparent 70%)`,
-          filter: 'blur(60px)',
-          transform: `scale(${1.4 + (isListening ? 0.2 : 0)})`,
+          filter: 'blur(80px)',
+          transform: `scale(${1.5 + (isListening ? 0.25 : 0)})`,
         }}
       />
 
-      {/* Primary ambient glow */}
+      {/* Primary ambient glow - LARGER */}
       <div
-        className="absolute inset-0 transition-all duration-700"
+        className="absolute transition-all duration-700"
         style={{
-          background: `radial-gradient(ellipse 70% 55% at 50% 60%,
-            rgba(255, 130, 50, ${0.35 * intensity}) 0%,
-            rgba(230, 90, 40, ${0.2 * intensity}) 30%,
-            rgba(180, 60, 30, ${0.1 * intensity}) 50%,
-            transparent 70%)`,
-          filter: 'blur(40px)',
+          top: '-20%',
+          left: '-30%',
+          right: '-30%',
+          bottom: '-10%',
+          background: `radial-gradient(ellipse 80% 65% at 50% 55%,
+            rgba(255, 130, 50, ${0.4 * intensity}) 0%,
+            rgba(240, 100, 45, ${0.25 * intensity}) 25%,
+            rgba(200, 70, 35, ${0.12 * intensity}) 45%,
+            transparent 65%)`,
+          filter: 'blur(50px)',
           animation: 'ambientPulse 5s ease-in-out infinite',
         }}
       />
@@ -129,160 +136,203 @@ export function FlameButton({
       <div
         className="absolute inset-0"
         style={{
-          background: `radial-gradient(ellipse 50% 45% at 50% 58%,
-            rgba(255, 160, 80, ${0.3 * intensity}) 0%,
-            rgba(255, 120, 60, ${0.15 * intensity}) 40%,
-            transparent 60%)`,
-          filter: 'blur(25px)',
+          background: `radial-gradient(ellipse 60% 50% at 50% 55%,
+            rgba(255, 160, 80, ${0.35 * intensity}) 0%,
+            rgba(255, 130, 65, ${0.18 * intensity}) 35%,
+            transparent 55%)`,
+          filter: 'blur(35px)',
           animation: 'breatheGlow 4s ease-in-out infinite 0.5s',
         }}
       />
 
-      {/* Flame container */}
+      {/* Flame container - wider */}
       <div
-        className="absolute bottom-[12%] left-1/2 -translate-x-1/2"
+        className="absolute bottom-[10%] left-1/2 -translate-x-1/2"
         style={{
-          width: 120 * config.scale,
-          height: 240 * config.scale,
+          width: 180 * config.scale,
+          height: 280 * config.scale,
         }}
       >
-        {/* Base glow at flame bottom */}
+        {/* Base glow at flame bottom - wider */}
         <div
           className="absolute bottom-0 left-1/2 -translate-x-1/2"
           style={{
-            width: 100 * config.scale * intensity,
-            height: 40 * config.scale * intensity,
+            width: 160 * config.scale * intensity,
+            height: 50 * config.scale * intensity,
             background: `radial-gradient(ellipse at center,
-              rgba(255, 200, 100, ${0.8 * intensity}) 0%,
-              rgba(255, 150, 80, ${0.4 * intensity}) 40%,
+              rgba(255, 210, 120, ${0.9 * intensity}) 0%,
+              rgba(255, 160, 90, ${0.5 * intensity}) 40%,
               transparent 70%)`,
-            filter: 'blur(12px)',
+            filter: 'blur(15px)',
           }}
         />
 
-        {/* Outer flame - deep red, very soft */}
+        {/* LEFT FLAME TONGUE */}
         <div
-          className="absolute bottom-0 left-1/2"
+          className="absolute bottom-0"
           style={{
-            width: 90 * config.scale * intensity,
-            height: 200 * config.scale * intensity,
+            left: '25%',
+            width: 50 * config.scale * intensity,
+            height: 160 * config.scale * intensity,
             background: `linear-gradient(to top,
-              rgba(180, 50, 20, 0.9) 0%,
-              rgba(200, 70, 30, 0.75) 15%,
-              rgba(220, 90, 40, 0.55) 35%,
-              rgba(240, 110, 50, 0.3) 55%,
-              rgba(255, 130, 60, 0.1) 75%,
+              rgba(220, 90, 35, 0.9) 0%,
+              rgba(240, 110, 45, 0.7) 25%,
+              rgba(255, 140, 60, 0.45) 50%,
+              rgba(255, 160, 80, 0.2) 75%,
               transparent 100%)`,
-            borderRadius: '45% 45% 45% 45% / 55% 55% 40% 40%',
-            filter: 'blur(18px)',
+            borderRadius: '45% 45% 48% 48% / 60% 60% 42% 42%',
+            filter: 'blur(12px)',
             transform: 'translateX(-50%)',
-            animation: 'flameWaver1 4s ease-in-out infinite',
+            animation: 'flameTongueLeft 3.2s ease-in-out infinite',
             transformOrigin: 'bottom center',
           }}
         />
 
-        {/* Second outer layer - for depth */}
+        {/* RIGHT FLAME TONGUE */}
         <div
-          className="absolute bottom-0 left-1/2"
+          className="absolute bottom-0"
           style={{
-            width: 75 * config.scale * intensity,
-            height: 175 * config.scale * intensity,
+            left: '75%',
+            width: 50 * config.scale * intensity,
+            height: 150 * config.scale * intensity,
             background: `linear-gradient(to top,
-              rgba(220, 80, 30, 0.85) 0%,
-              rgba(240, 100, 40, 0.7) 20%,
-              rgba(255, 120, 50, 0.5) 40%,
-              rgba(255, 140, 70, 0.25) 65%,
+              rgba(210, 85, 30, 0.85) 0%,
+              rgba(235, 105, 42, 0.65) 25%,
+              rgba(250, 135, 58, 0.4) 50%,
+              rgba(255, 155, 75, 0.18) 75%,
               transparent 100%)`,
-            borderRadius: '48% 48% 45% 45% / 55% 55% 42% 42%',
+            borderRadius: '45% 45% 48% 48% / 58% 58% 44% 44%',
             filter: 'blur(12px)',
             transform: 'translateX(-50%)',
-            animation: 'flameWaver2 3.5s ease-in-out infinite 0.2s',
+            animation: 'flameTongueRight 3.5s ease-in-out infinite 0.3s',
             transformOrigin: 'bottom center',
           }}
         />
 
-        {/* Middle flame - orange */}
+        {/* CENTER-LEFT FLAME */}
         <div
-          className="absolute bottom-0 left-1/2"
+          className="absolute bottom-0"
           style={{
+            left: '40%',
             width: 55 * config.scale * intensity,
-            height: 145 * config.scale * intensity,
+            height: 190 * config.scale * intensity,
+            background: `linear-gradient(to top,
+              rgba(240, 100, 40, 0.92) 0%,
+              rgba(250, 120, 50, 0.75) 20%,
+              rgba(255, 145, 65, 0.5) 45%,
+              rgba(255, 165, 85, 0.25) 70%,
+              transparent 100%)`,
+            borderRadius: '48% 48% 46% 46% / 58% 58% 44% 44%',
+            filter: 'blur(10px)',
+            transform: 'translateX(-50%)',
+            animation: 'flameTongueCenterLeft 2.8s ease-in-out infinite 0.1s',
+            transformOrigin: 'bottom center',
+          }}
+        />
+
+        {/* CENTER-RIGHT FLAME */}
+        <div
+          className="absolute bottom-0"
+          style={{
+            left: '60%',
+            width: 55 * config.scale * intensity,
+            height: 185 * config.scale * intensity,
+            background: `linear-gradient(to top,
+              rgba(235, 95, 38, 0.9) 0%,
+              rgba(248, 118, 48, 0.72) 20%,
+              rgba(255, 142, 62, 0.48) 45%,
+              rgba(255, 162, 82, 0.22) 70%,
+              transparent 100%)`,
+            borderRadius: '46% 46% 48% 48% / 56% 56% 46% 46%',
+            filter: 'blur(10px)',
+            transform: 'translateX(-50%)',
+            animation: 'flameTongueCenterRight 3s ease-in-out infinite 0.2s',
+            transformOrigin: 'bottom center',
+          }}
+        />
+
+        {/* MAIN CENTER FLAME - tallest */}
+        <div
+          className="absolute bottom-0 left-1/2"
+          style={{
+            width: 70 * config.scale * intensity,
+            height: 220 * config.scale * intensity,
             background: `linear-gradient(to top,
               rgba(255, 140, 50, 0.95) 0%,
-              rgba(255, 160, 70, 0.85) 20%,
-              rgba(255, 175, 90, 0.65) 40%,
-              rgba(255, 190, 110, 0.4) 60%,
-              rgba(255, 200, 130, 0.15) 80%,
+              rgba(255, 160, 70, 0.85) 15%,
+              rgba(255, 175, 90, 0.65) 35%,
+              rgba(255, 190, 110, 0.4) 55%,
+              rgba(255, 205, 130, 0.18) 75%,
               transparent 100%)`,
             borderRadius: '50% 50% 48% 48% / 55% 55% 45% 45%',
             filter: 'blur(8px)',
             transform: 'translateX(-50%)',
-            animation: 'flameWaver3 3s ease-in-out infinite 0.1s',
+            animation: 'flameCenter 2.6s ease-in-out infinite',
             transformOrigin: 'bottom center',
           }}
         />
 
-        {/* Inner flame - yellow-orange */}
+        {/* Inner bright flame */}
         <div
           className="absolute bottom-0 left-1/2"
           style={{
-            width: 38 * config.scale * intensity,
-            height: 110 * config.scale * intensity,
+            width: 45 * config.scale * intensity,
+            height: 150 * config.scale * intensity,
             background: `linear-gradient(to top,
-              rgba(255, 200, 120, 1) 0%,
-              rgba(255, 210, 140, 0.9) 20%,
-              rgba(255, 215, 160, 0.7) 40%,
-              rgba(255, 220, 175, 0.45) 60%,
-              rgba(255, 225, 190, 0.2) 80%,
+              rgba(255, 210, 140, 1) 0%,
+              rgba(255, 220, 160, 0.9) 20%,
+              rgba(255, 225, 175, 0.7) 40%,
+              rgba(255, 230, 190, 0.4) 60%,
+              rgba(255, 235, 200, 0.15) 80%,
               transparent 100%)`,
             borderRadius: '50% 50% 50% 50% / 58% 58% 45% 45%',
             filter: 'blur(5px)',
             transform: 'translateX(-50%)',
-            animation: 'flameWaver4 2.5s ease-in-out infinite',
+            animation: 'flameInner 2.2s ease-in-out infinite',
             transformOrigin: 'bottom center',
           }}
         />
 
-        {/* Core flame - bright yellow/white */}
+        {/* Core bright yellow/white */}
         <div
-          className="absolute bottom-[3%] left-1/2"
+          className="absolute bottom-[2%] left-1/2"
           style={{
-            width: 22 * config.scale * intensity,
-            height: 70 * config.scale * intensity,
+            width: 28 * config.scale * intensity,
+            height: 90 * config.scale * intensity,
             background: `linear-gradient(to top,
-              rgba(255, 250, 230, 0.98) 0%,
-              rgba(255, 245, 210, 0.9) 25%,
-              rgba(255, 235, 190, 0.7) 50%,
-              rgba(255, 225, 170, 0.4) 75%,
+              rgba(255, 250, 235, 0.98) 0%,
+              rgba(255, 248, 220, 0.9) 25%,
+              rgba(255, 240, 200, 0.7) 50%,
+              rgba(255, 230, 180, 0.4) 75%,
               transparent 100%)`,
             borderRadius: '50% 50% 50% 50% / 60% 60% 45% 45%',
             filter: 'blur(3px)',
             transform: 'translateX(-50%)',
-            animation: 'flameCore 2s ease-in-out infinite',
+            animation: 'flameCore 1.8s ease-in-out infinite',
             transformOrigin: 'bottom center',
           }}
         />
 
         {/* Hot white center */}
         <div
-          className="absolute bottom-[6%] left-1/2"
+          className="absolute bottom-[5%] left-1/2"
           style={{
-            width: 12 * config.scale * intensity,
-            height: 35 * config.scale * intensity,
+            width: 14 * config.scale * intensity,
+            height: 45 * config.scale * intensity,
             background: `linear-gradient(to top,
               rgba(255, 255, 255, 0.95) 0%,
-              rgba(255, 255, 245, 0.75) 40%,
-              rgba(255, 250, 230, 0.4) 70%,
+              rgba(255, 255, 250, 0.8) 40%,
+              rgba(255, 252, 240, 0.45) 70%,
               transparent 100%)`,
             borderRadius: '50% 50% 50% 50% / 60% 60% 45% 45%',
             filter: 'blur(2px)',
             transform: 'translateX(-50%)',
-            animation: 'coreFlicker 1.5s ease-in-out infinite',
+            animation: 'coreFlicker 1.4s ease-in-out infinite',
             transformOrigin: 'bottom center',
           }}
         />
 
-        {/* Random floating embers */}
+        {/* Random floating embers - from wider area */}
         {embers.map((ember) => (
           <div
             key={ember.id}
@@ -293,11 +343,11 @@ export function FlameButton({
               left: `${ember.x}%`,
               bottom: `${ember.y}%`,
               background: `radial-gradient(circle,
-                rgba(255, 240, 200, ${ember.opacity}) 0%,
-                rgba(255, 180, 100, ${ember.opacity * 0.7}) 40%,
-                rgba(255, 140, 80, ${ember.opacity * 0.3}) 70%,
+                rgba(255, 245, 210, ${ember.opacity}) 0%,
+                rgba(255, 190, 110, ${ember.opacity * 0.7}) 40%,
+                rgba(255, 150, 85, ${ember.opacity * 0.3}) 70%,
                 transparent 100%)`,
-              boxShadow: `0 0 ${ember.size * 2}px ${ember.size}px rgba(255, 180, 100, ${ember.opacity * 0.4})`,
+              boxShadow: `0 0 ${ember.size * 2.5}px ${ember.size * 1.2}px rgba(255, 180, 100, ${ember.opacity * 0.45})`,
               filter: 'blur(0.5px)',
               animation: `emberRise ${ember.duration}s ease-out forwards`,
               '--drift': `${ember.drift}px`,
@@ -310,21 +360,21 @@ export function FlameButton({
       {isListening && (
         <>
           <div
-            className="absolute bottom-[32%] left-1/2 rounded-full pointer-events-none"
+            className="absolute bottom-[30%] left-1/2 rounded-full pointer-events-none"
             style={{
-              width: 80 * config.scale,
-              height: 80 * config.scale,
-              border: '1px solid rgba(255, 180, 100, 0.25)',
+              width: 100 * config.scale,
+              height: 100 * config.scale,
+              border: '1px solid rgba(255, 180, 100, 0.2)',
               transform: 'translateX(-50%)',
               animation: 'pulseRing 2.5s ease-out infinite',
             }}
           />
           <div
-            className="absolute bottom-[32%] left-1/2 rounded-full pointer-events-none"
+            className="absolute bottom-[30%] left-1/2 rounded-full pointer-events-none"
             style={{
-              width: 80 * config.scale,
-              height: 80 * config.scale,
-              border: '1px solid rgba(255, 180, 100, 0.15)',
+              width: 100 * config.scale,
+              height: 100 * config.scale,
+              border: '1px solid rgba(255, 180, 100, 0.12)',
               transform: 'translateX(-50%)',
               animation: 'pulseRing 2.5s ease-out infinite 0.8s',
             }}
@@ -334,7 +384,7 @@ export function FlameButton({
 
       {/* Story ember count */}
       {showEmberCount > 0 && (
-        <div className="absolute bottom-[5%] left-1/2 -translate-x-1/2 flex gap-2">
+        <div className="absolute bottom-[4%] left-1/2 -translate-x-1/2 flex gap-2">
           {[...Array(Math.min(showEmberCount, 7))].map((_, i) => (
             <div
               key={i}
@@ -342,8 +392,8 @@ export function FlameButton({
               style={{
                 width: 6 * config.scale,
                 height: 6 * config.scale,
-                background: 'radial-gradient(circle, rgba(255, 210, 140, 0.95), rgba(255, 160, 90, 0.7))',
-                boxShadow: '0 0 10px 4px rgba(255, 170, 90, 0.4)',
+                background: 'radial-gradient(circle, rgba(255, 215, 150, 0.95), rgba(255, 165, 95, 0.7))',
+                boxShadow: '0 0 12px 5px rgba(255, 175, 95, 0.4)',
                 animation: `storyEmberGlow 3s ease-in-out infinite`,
                 animationDelay: `${i * 0.4}s`,
               }}
@@ -364,48 +414,61 @@ export function FlameButton({
       <style jsx>{`
         @keyframes ambientPulse {
           0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.03); opacity: 0.92; }
+          50% { transform: scale(1.04); opacity: 0.9; }
         }
 
         @keyframes breatheGlow {
           0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.06); opacity: 0.88; }
+          50% { transform: scale(1.07); opacity: 0.85; }
         }
 
-        @keyframes flameWaver1 {
-          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(0deg); }
-          25% { transform: translateX(-50%) scaleX(1.04) scaleY(1.02) rotate(0.5deg); }
-          50% { transform: translateX(-50%) scaleX(0.97) scaleY(1.03) rotate(-0.3deg); }
-          75% { transform: translateX(-50%) scaleX(1.02) scaleY(0.99) rotate(0.2deg); }
+        @keyframes flameTongueLeft {
+          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(-2deg); }
+          30% { transform: translateX(-50%) scaleX(1.08) scaleY(1.04) rotate(-1deg); }
+          60% { transform: translateX(-50%) scaleX(0.94) scaleY(1.06) rotate(-3deg); }
         }
 
-        @keyframes flameWaver2 {
-          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(0deg); }
-          30% { transform: translateX(-50%) scaleX(1.06) scaleY(1.03) rotate(-0.5deg); }
-          60% { transform: translateX(-50%) scaleX(0.96) scaleY(1.04) rotate(0.4deg); }
+        @keyframes flameTongueRight {
+          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(2deg); }
+          35% { transform: translateX(-50%) scaleX(1.06) scaleY(1.05) rotate(3deg); }
+          65% { transform: translateX(-50%) scaleX(0.95) scaleY(1.04) rotate(1deg); }
         }
 
-        @keyframes flameWaver3 {
+        @keyframes flameTongueCenterLeft {
+          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(-0.5deg); }
+          40% { transform: translateX(-50%) scaleX(1.1) scaleY(1.05) rotate(0.5deg) translateX(-2px); }
+          70% { transform: translateX(-50%) scaleX(0.93) scaleY(1.07) rotate(-1deg); }
+        }
+
+        @keyframes flameTongueCenterRight {
+          0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1) rotate(0.5deg); }
+          35% { transform: translateX(-50%) scaleX(1.08) scaleY(1.06) rotate(-0.5deg) translateX(2px); }
+          65% { transform: translateX(-50%) scaleX(0.94) scaleY(1.05) rotate(1deg); }
+        }
+
+        @keyframes flameCenter {
           0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1); }
-          35% { transform: translateX(-50%) scaleX(1.08) scaleY(1.04) translateX(1px); }
-          65% { transform: translateX(-50%) scaleX(0.94) scaleY(1.05) translateX(-1px); }
+          25% { transform: translateX(-50%) scaleX(1.06) scaleY(1.03) translateX(1px); }
+          50% { transform: translateX(-50%) scaleX(0.96) scaleY(1.05); }
+          75% { transform: translateX(-50%) scaleX(1.03) scaleY(0.98) translateX(-1px); }
         }
 
-        @keyframes flameWaver4 {
+        @keyframes flameInner {
           0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1); }
-          40% { transform: translateX(-50%) scaleX(1.1) scaleY(1.06) translateX(1.5px); }
-          70% { transform: translateX(-50%) scaleX(0.92) scaleY(1.08) translateX(-1px); }
+          35% { transform: translateX(-50%) scaleX(1.12) scaleY(1.06) translateX(1.5px); }
+          70% { transform: translateX(-50%) scaleX(0.9) scaleY(1.08) translateX(-1px); }
         }
 
         @keyframes flameCore {
           0%, 100% { transform: translateX(-50%) scaleY(1); opacity: 0.95; }
-          50% { transform: translateX(-50%) scaleY(1.08); opacity: 1; }
+          50% { transform: translateX(-50%) scaleY(1.1); opacity: 1; }
         }
 
         @keyframes coreFlicker {
-          0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.9; }
-          30% { transform: translateX(-50%) scale(1.05); opacity: 1; }
-          60% { transform: translateX(-50%) scale(0.97); opacity: 0.85; }
+          0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.88; }
+          25% { transform: translateX(-50%) scale(1.06); opacity: 1; }
+          50% { transform: translateX(-50%) scale(0.96); opacity: 0.82; }
+          75% { transform: translateX(-50%) scale(1.03); opacity: 0.95; }
         }
 
         @keyframes emberRise {
@@ -413,21 +476,21 @@ export function FlameButton({
             transform: translateY(0) translateX(0) scale(1);
             opacity: 0;
           }
-          10% {
+          8% {
             opacity: 1;
           }
-          90% {
-            opacity: 0.3;
+          85% {
+            opacity: 0.25;
           }
           100% {
-            transform: translateY(-200px) translateX(var(--drift)) scale(0.3);
+            transform: translateY(-280px) translateX(var(--drift)) scale(0.2);
             opacity: 0;
           }
         }
 
         @keyframes pulseRing {
-          0% { transform: translateX(-50%) scale(1); opacity: 0.3; }
-          100% { transform: translateX(-50%) scale(2.8); opacity: 0; }
+          0% { transform: translateX(-50%) scale(1); opacity: 0.25; }
+          100% { transform: translateX(-50%) scale(3); opacity: 0; }
         }
 
         @keyframes storyEmberGlow {
