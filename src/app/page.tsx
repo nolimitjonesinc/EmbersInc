@@ -1,53 +1,63 @@
 'use client';
 
 import Link from 'next/link';
+import { AmbientFire } from '@/components/conversation/AmbientFire';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#1a1714] text-[#f9f7f2] overflow-hidden">
-      {/* Grain overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 opacity-[0.03]"
+    <div className="min-h-screen bg-[#0a0908] text-[#f9f7f2] overflow-hidden">
+      {/* Subtle grain overlay */}
+      <div
+        className="fixed inset-0 pointer-events-none z-50 opacity-[0.02]"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
         }}
       />
 
-      {/* Warm ambient glow from top */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] pointer-events-none"
+      {/* Ambient glow from bottom - fire light */}
+      <div
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[80%] pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at center top, rgba(232, 109, 72, 0.15) 0%, transparent 70%)',
+          background: `radial-gradient(ellipse at center bottom,
+            rgba(232, 109, 72, 0.12) 0%,
+            rgba(196, 90, 58, 0.06) 30%,
+            rgba(120, 50, 30, 0.02) 50%,
+            transparent 70%)`,
         }}
       />
 
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-40 bg-[#1a1714]/80 backdrop-blur-md border-b border-white/5">
+      <nav className="fixed top-0 left-0 right-0 z-40 bg-[#0a0908]/60 backdrop-blur-md border-b border-white/[0.03]">
         <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3 group">
             <span
-              className="w-4 h-4 rounded-full animate-pulse"
+              className="w-3 h-3 rounded-full transition-all duration-500 group-hover:scale-110"
               style={{
-                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                boxShadow: '0 0 20px 5px rgba(232, 109, 72, 0.4)',
+                background:
+                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: '0 0 15px 4px rgba(232, 109, 72, 0.4)',
               }}
             />
-            <span className="text-2xl font-serif tracking-wide">Embers</span>
+            <span className="text-xl font-serif tracking-wide text-[#f9f7f2]/80 group-hover:text-[#f9f7f2] transition-colors">
+              Embers
+            </span>
           </Link>
           <div className="flex items-center gap-8">
             <Link
               href="/stories"
-              className="text-[#f9f7f2]/60 hover:text-[#f9f7f2] transition-colors text-sm tracking-wide hidden sm:block"
+              className="text-[#f9f7f2]/40 hover:text-[#f9f7f2]/80 transition-colors text-sm tracking-wide hidden sm:block"
             >
               Stories
             </Link>
             <Link
               href="/life-book"
-              className="text-[#f9f7f2]/60 hover:text-[#f9f7f2] transition-colors text-sm tracking-wide hidden sm:block"
+              className="text-[#f9f7f2]/40 hover:text-[#f9f7f2]/80 transition-colors text-sm tracking-wide hidden sm:block"
             >
               Life Book
             </Link>
             <Link
               href="/conversation"
-              className="px-5 py-2.5 rounded-full text-sm tracking-wide transition-all border border-[#E86D48]/30 hover:border-[#E86D48] hover:bg-[#E86D48]/10"
+              className="px-5 py-2.5 rounded-full text-sm tracking-wide transition-all border border-[#E86D48]/20 text-[#E86D48]/80 hover:border-[#E86D48]/50 hover:bg-[#E86D48]/10"
             >
               Begin
             </Link>
@@ -58,94 +68,85 @@ export default function Home() {
       {/* Hero Section */}
       <main className="relative">
         <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16">
-          {/* The Ember - Central Focus */}
-          <div className="relative w-48 h-48 mb-16">
-            {/* Outer glow rings */}
-            <span
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full opacity-20"
-              style={{
-                background: 'radial-gradient(circle, rgba(232, 109, 72, 0.3) 0%, transparent 70%)',
-                animation: 'pulse 4s ease-in-out infinite',
-              }}
-            />
-            <span
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full opacity-30"
-              style={{
-                background: 'radial-gradient(circle, rgba(232, 109, 72, 0.4) 0%, transparent 70%)',
-                animation: 'pulse 4s ease-in-out infinite 1s',
-              }}
-            />
-            {/* The core ember */}
-            <span
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full"
-              style={{
-                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                boxShadow: `
-                  0 0 60px 20px rgba(232, 109, 72, 0.5),
-                  0 0 120px 40px rgba(232, 109, 72, 0.25),
-                  0 0 180px 60px rgba(232, 109, 72, 0.1)
-                `,
-                animation: 'ember-glow 5s ease-in-out infinite',
-              }}
-            />
+          {/* The Ambient Fire - Central Focus */}
+          <div className="relative mb-12">
+            <AmbientFire size="large" />
           </div>
 
           {/* Headline */}
-          <div className="text-center max-w-3xl mx-auto space-y-8">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif leading-tight tracking-tight">
+          <div className="text-center max-w-3xl mx-auto space-y-6">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif leading-tight tracking-tight text-[#f9f7f2]/95">
               Your stories deserve to live forever
             </h1>
-            <p className="text-xl md:text-2xl text-[#f9f7f2]/60 font-light leading-relaxed max-w-2xl mx-auto">
-              Speak your memories. Let them become gifts for those you love—across time, across generations.
+            <p className="text-lg md:text-xl text-[#f9f7f2]/40 font-light leading-relaxed max-w-2xl mx-auto">
+              Speak your memories. Let them become gifts for those you love—across
+              time, across generations.
             </p>
           </div>
 
           {/* CTA */}
-          <div className="mt-16 flex flex-col items-center gap-6">
+          <div className="mt-12 flex flex-col items-center gap-4">
             <Link
               href="/conversation"
-              className="group relative px-10 py-4 rounded-full text-lg tracking-wide transition-all overflow-hidden"
+              className="group relative px-10 py-4 rounded-full text-base tracking-wide transition-all overflow-hidden"
               style={{
                 background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',
-                boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)',
+                boxShadow: '0 0 40px rgba(232, 109, 72, 0.25)',
               }}
             >
-              <span className="relative z-10">Start Sharing</span>
+              <span className="relative z-10 text-white">Start Sharing</span>
               <span className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
-            <p className="text-sm text-[#f9f7f2]/40">
+            <p className="text-xs text-[#f9f7f2]/25 tracking-wide">
               No account needed. Just your voice and your memories.
             </p>
           </div>
 
           {/* Scroll indicator */}
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 text-[#f9f7f2]/30">
-            <span className="text-xs tracking-widest uppercase">Discover</span>
-            <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[#f9f7f2]/20">
+            <span className="text-[10px] tracking-[0.2em] uppercase">Discover</span>
+            <svg
+              className="w-4 h-4 animate-bounce"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M19 14l-7 7m0 0l-7-7m7 7V3"
+              />
             </svg>
           </div>
         </section>
 
-        {/* The Story Quote Section */}
+        {/* Quote Section */}
         <section className="py-32 px-6 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#E86D48]/5 to-transparent" />
-          <div className="max-w-4xl mx-auto text-center relative">
-            <div className="text-[#E86D48]/60 text-6xl mb-8 font-serif">&ldquo;</div>
-            <blockquote className="text-2xl md:text-3xl lg:text-4xl font-serif leading-relaxed text-[#f9f7f2]/90 mb-8">
-              It was Christmas 1952, and we had this beautiful pine tree that barely fit through the door.
-              The star on top was bent from where it hit the ceiling, but Mom said it looked like it was winking at us...
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse at center, rgba(232, 109, 72, 0.04) 0%, transparent 60%)',
+            }}
+          />
+          <div className="max-w-3xl mx-auto text-center relative">
+            <div className="text-[#E86D48]/30 text-5xl mb-6 font-serif">&ldquo;</div>
+            <blockquote className="text-xl md:text-2xl lg:text-3xl font-serif leading-relaxed text-[#f9f7f2]/70 mb-6">
+              It was Christmas 1952, and we had this beautiful pine tree that barely
+              fit through the door. The star on top was bent from where it hit the
+              ceiling, but Mom said it looked like it was winking at us...
             </blockquote>
-            <p className="text-[#f9f7f2]/40 font-light italic">
+            <p className="text-[#f9f7f2]/25 font-light italic text-sm">
               A memory preserved forever
             </p>
           </div>
         </section>
 
-        {/* How It Works - Minimal */}
+        {/* How It Works */}
         <section className="py-32 px-6">
-          <div className="max-w-5xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-serif text-center mb-20">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl md:text-3xl font-serif text-center mb-20 text-[#f9f7f2]/80">
               As natural as a conversation
             </h2>
             <div className="grid md:grid-cols-3 gap-16">
@@ -153,73 +154,78 @@ export default function Home() {
                 {
                   step: '01',
                   title: 'Speak',
-                  description: 'Press the ember and talk naturally. Share whatever comes to mind—a memory, a feeling, a moment.',
+                  description:
+                    'Tap the ember and talk naturally. Share whatever comes to mind—a memory, a feeling, a moment.',
                 },
                 {
                   step: '02',
                   title: 'Listen',
-                  description: 'A patient companion asks gentle questions, helping you remember details you thought were lost.',
+                  description:
+                    'A patient companion asks gentle questions, helping you remember details you thought were lost.',
                 },
                 {
                   step: '03',
                   title: 'Preserve',
-                  description: 'Your stories become part of your Life Book—organized, searchable, ready to share with those you love.',
+                  description:
+                    'Your stories become part of your Life Book—organized, searchable, ready to share.',
                 },
               ].map((item) => (
                 <div key={item.step} className="text-center">
-                  <div className="text-[#E86D48]/30 text-5xl font-light mb-6">{item.step}</div>
-                  <h3 className="text-xl font-serif mb-4">{item.title}</h3>
-                  <p className="text-[#f9f7f2]/50 leading-relaxed">{item.description}</p>
+                  <div className="text-[#E86D48]/20 text-4xl font-light mb-4">
+                    {item.step}
+                  </div>
+                  <h3 className="text-lg font-serif mb-3 text-[#f9f7f2]/80">
+                    {item.title}
+                  </h3>
+                  <p className="text-[#f9f7f2]/35 leading-relaxed text-sm">
+                    {item.description}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* The Life Book Preview */}
-        <section className="py-32 px-6 bg-[#141210]">
+        {/* Life Book Preview */}
+        <section className="py-32 px-6 bg-[#080706]">
           <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-20">
-              <h2 className="text-3xl md:text-4xl font-serif mb-6">
+            <div className="text-center mb-16">
+              <h2 className="text-2xl md:text-3xl font-serif mb-4 text-[#f9f7f2]/80">
                 Your Life Book
               </h2>
-              <p className="text-[#f9f7f2]/50 text-lg max-w-2xl mx-auto">
-                Every story finds its place in seven meaningful chapters—the architecture of a life.
+              <p className="text-[#f9f7f2]/35 text-base max-w-xl mx-auto">
+                Every story finds its place in seven meaningful chapters
               </p>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { title: 'Who I Am', color: '#E86D48', gradient: 'from-orange-500/20 via-amber-500/10' },
-                { title: 'Where I Come From', color: '#8B5E3C', gradient: 'from-amber-700/20 via-stone-600/10' },
-                { title: "What I've Loved", color: '#D64545', gradient: 'from-rose-500/20 via-red-600/10' },
-                { title: "What I've Learned", color: '#5DADE2', gradient: 'from-sky-400/20 via-blue-500/10' },
-                { title: "What's Been Hard", color: '#5D6D7E', gradient: 'from-slate-500/20 via-gray-600/10' },
-                { title: "Still Figuring Out", color: '#9B59B6', gradient: 'from-purple-500/20 via-violet-600/10' },
-                { title: 'What I Want You to Know', color: '#F5A623', gradient: 'from-amber-400/20 via-yellow-500/10' },
+                { title: 'Who I Am', color: '#E86D48' },
+                { title: 'Where I Come From', color: '#8B5E3C' },
+                { title: "What I've Loved", color: '#D64545' },
+                { title: "What I've Learned", color: '#5DADE2' },
+                { title: "What's Been Hard", color: '#5D6D7E' },
+                { title: 'Still Figuring Out', color: '#9B59B6' },
+                { title: 'What I Want You to Know', color: '#F5A623' },
               ].map((chapter) => (
                 <div
                   key={chapter.title}
-                  className={`relative p-6 rounded-2xl border border-white/5 hover:border-white/15 transition-all group cursor-pointer overflow-hidden`}
+                  className="relative p-5 rounded-xl border border-white/[0.04] hover:border-white/10 transition-all group cursor-pointer overflow-hidden"
                 >
-                  {/* Gradient background */}
+                  {/* Subtle glow */}
                   <div
-                    className={`absolute inset-0 bg-gradient-to-br ${chapter.gradient} to-transparent opacity-60 group-hover:opacity-100 transition-opacity`}
-                  />
-                  {/* Subtle glow orb */}
-                  <div
-                    className="absolute -top-4 -right-4 w-24 h-24 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl"
+                    className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-0 group-hover:opacity-20 transition-opacity blur-2xl"
                     style={{ backgroundColor: chapter.color }}
                   />
-                  <div className="relative z-10">
-                    <h3 className="text-base font-serif text-[#f9f7f2]/90 group-hover:text-[#f9f7f2] transition-colors">{chapter.title}</h3>
-                  </div>
+                  <h3 className="relative text-sm font-serif text-[#f9f7f2]/60 group-hover:text-[#f9f7f2]/90 transition-colors">
+                    {chapter.title}
+                  </h3>
                 </div>
               ))}
               <Link
                 href="/life-book"
-                className="p-6 rounded-2xl border border-dashed border-white/10 hover:border-[#E86D48]/50 transition-all flex items-center justify-center group"
+                className="p-5 rounded-xl border border-dashed border-white/[0.06] hover:border-[#E86D48]/30 transition-all flex items-center justify-center group"
               >
-                <span className="text-[#f9f7f2]/40 group-hover:text-[#E86D48] transition-colors text-sm">
+                <span className="text-[#f9f7f2]/25 group-hover:text-[#E86D48]/60 transition-colors text-sm">
                   Explore →
                 </span>
               </Link>
@@ -227,36 +233,44 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Designed for Everyone */}
+        {/* Features */}
         <section className="py-32 px-6">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-serif text-center mb-20">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-2xl md:text-3xl font-serif text-center mb-16 text-[#f9f7f2]/80">
               Designed with care
             </h2>
-            <div className="grid md:grid-cols-2 gap-12">
+            <div className="grid md:grid-cols-2 gap-10">
               {[
                 {
                   title: 'Voice first',
-                  description: 'No typing required. Just speak naturally, like talking to an old friend.',
+                  description:
+                    'No typing required. Just speak naturally, like talking to an old friend.',
                 },
                 {
                   title: 'Patient and kind',
-                  description: 'Take all the time you need. Pause, think, remember. There is no rush here.',
+                  description:
+                    'Take all the time you need. Pause, think, remember. There is no rush here.',
                 },
                 {
                   title: 'Clear and readable',
-                  description: 'Large text, high contrast, intuitive flow. Designed for comfort.',
+                  description:
+                    'Large text, high contrast, intuitive flow. Designed for comfort.',
                 },
                 {
                   title: 'Private and secure',
-                  description: 'Your stories are yours. Share only what you choose, with whom you choose.',
+                  description:
+                    'Your stories are yours. Share only what you choose, with whom you choose.',
                 },
               ].map((feature) => (
-                <div key={feature.title} className="flex gap-5">
-                  <div className="w-px bg-gradient-to-b from-[#E86D48] to-transparent flex-shrink-0" />
+                <div key={feature.title} className="flex gap-4">
+                  <div className="w-px bg-gradient-to-b from-[#E86D48]/40 to-transparent flex-shrink-0" />
                   <div>
-                    <h3 className="text-lg font-medium mb-2">{feature.title}</h3>
-                    <p className="text-[#f9f7f2]/50 leading-relaxed">{feature.description}</p>
+                    <h3 className="text-base font-medium mb-2 text-[#f9f7f2]/70">
+                      {feature.title}
+                    </h3>
+                    <p className="text-[#f9f7f2]/35 leading-relaxed text-sm">
+                      {feature.description}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -266,30 +280,38 @@ export default function Home() {
 
         {/* Final CTA */}
         <section className="py-32 px-6 relative">
-          <div className="absolute inset-0 bg-gradient-to-t from-[#E86D48]/10 to-transparent" />
-          <div className="max-w-3xl mx-auto text-center relative">
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse at center bottom, rgba(232, 109, 72, 0.08) 0%, transparent 60%)',
+            }}
+          />
+          <div className="max-w-2xl mx-auto text-center relative">
             {/* Small ember */}
-            <div className="w-16 h-16 mx-auto mb-12 relative">
+            <div className="w-12 h-12 mx-auto mb-10 relative">
               <span
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full"
                 style={{
-                  background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                  boxShadow: '0 0 40px 10px rgba(232, 109, 72, 0.4)',
+                  background:
+                    'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                  boxShadow: '0 0 30px 8px rgba(232, 109, 72, 0.35)',
+                  animation: 'ember-glow 5s ease-in-out infinite',
                 }}
               />
             </div>
-            <h2 className="text-3xl md:text-4xl font-serif mb-6">
+            <h2 className="text-2xl md:text-3xl font-serif mb-4 text-[#f9f7f2]/90">
               Your family is waiting to hear your story
             </h2>
-            <p className="text-[#f9f7f2]/50 text-lg mb-12">
+            <p className="text-[#f9f7f2]/35 text-base mb-10">
               Every memory you share becomes a gift that transcends time.
             </p>
             <Link
               href="/conversation"
-              className="inline-block px-12 py-5 rounded-full text-lg tracking-wide transition-all"
+              className="inline-block px-10 py-4 rounded-full text-base tracking-wide transition-all text-white"
               style={{
                 background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',
-                boxShadow: '0 0 40px rgba(232, 109, 72, 0.35)',
+                boxShadow: '0 0 35px rgba(232, 109, 72, 0.3)',
               }}
             >
               Begin Your Story
@@ -299,26 +321,31 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-12 px-6">
+      <footer className="border-t border-white/[0.03] py-10 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span
-              className="w-3 h-3 rounded-full"
+              className="w-2.5 h-2.5 rounded-full"
               style={{
-                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                boxShadow: '0 0 10px 3px rgba(232, 109, 72, 0.3)',
+                background:
+                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: '0 0 8px 2px rgba(232, 109, 72, 0.3)',
               }}
             />
-            <span className="font-serif text-lg">Embers</span>
+            <span className="font-serif text-base text-[#f9f7f2]/50">Embers</span>
           </div>
-          <p className="text-[#f9f7f2]/30 text-sm">
-            © {new Date().getFullYear()} Embers Inc. Preserving stories for generations.
+          <p className="text-[#f9f7f2]/20 text-xs">
+            © {new Date().getFullYear()} Embers Inc. Preserving stories for
+            generations.
           </p>
-          <div className="flex gap-8 text-sm text-[#f9f7f2]/30">
-            <Link href="/privacy" className="hover:text-[#f9f7f2]/60 transition-colors">
+          <div className="flex gap-6 text-xs text-[#f9f7f2]/20">
+            <Link
+              href="/privacy"
+              className="hover:text-[#f9f7f2]/40 transition-colors"
+            >
               Privacy
             </Link>
-            <Link href="/terms" className="hover:text-[#f9f7f2]/60 transition-colors">
+            <Link href="/terms" className="hover:text-[#f9f7f2]/40 transition-colors">
               Terms
             </Link>
           </div>
@@ -327,19 +354,14 @@ export default function Home() {
 
       <style jsx>{`
         @keyframes ember-glow {
-          0%, 100% {
+          0%,
+          100% {
             transform: translate(-50%, -50%) scale(1);
-            box-shadow:
-              0 0 60px 20px rgba(232, 109, 72, 0.5),
-              0 0 120px 40px rgba(232, 109, 72, 0.25),
-              0 0 180px 60px rgba(232, 109, 72, 0.1);
+            box-shadow: 0 0 30px 8px rgba(232, 109, 72, 0.35);
           }
           50% {
             transform: translate(-50%, -50%) scale(1.1);
-            box-shadow:
-              0 0 80px 30px rgba(232, 109, 72, 0.6),
-              0 0 150px 50px rgba(232, 109, 72, 0.3),
-              0 0 200px 70px rgba(232, 109, 72, 0.15);
+            box-shadow: 0 0 40px 12px rgba(232, 109, 72, 0.45);
           }
         }
       `}</style>
