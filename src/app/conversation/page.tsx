@@ -8,7 +8,9 @@ import { SilenceProgressBar } from '@/components/conversation/SilenceProgressBar
 import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { Message } from '@/types';
-import { getStarterPrompts } from '@/lib/utils/chapters';
+import { interestService } from '@/lib/services/interestService';
+import { userStyleService } from '@/lib/services/userStyleService';
+import { getPromptsForInterests, getRandomWarmPrompt } from '@/lib/prompts/promptSelector';
 
 const END_PHRASES = [
   'goodbye', 'good bye', 'bye bye', 'thank you', 'thanks',
@@ -38,17 +40,52 @@ export default function ConversationPage() {
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [savedStoriesCount, setSavedStoriesCount] = useState(0);
 
+  // New state for personalization
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [userContext, setUserContext] = useState<{
+    isReturningUser: boolean;
+    frequentlyMentionedPeople: string[];
+    preferredTimeframes: string[];
+    commonThemes: string[];
+  }>({
+    isReturningUser: false,
+    frequentlyMentionedPeople: [],
+    preferredTimeframes: [],
+    commonThemes: []
+  });
+  const [starterPrompt, setStarterPrompt] = useState('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
 
-  const [starterPrompt] = useState(() => getStarterPrompts()[0]);
-
+  // Load user data on mount
   useEffect(() => {
+    // Load name
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) setUserName(storedName);
 
+    // Load selected interests
+    const interests = interestService.get();
+    setSelectedInterests(interests);
+
+    // Load user context (returning user, mentioned people, themes)
+    const context = userStyleService.getContext();
+    setUserContext(context);
+
+    // Generate personalized starter prompt
+    let prompt: string;
+    if (interests.length > 0) {
+      const matchingPrompts = getPromptsForInterests(interests);
+      const randomPrompt = matchingPrompts[Math.floor(Math.random() * matchingPrompts.length)];
+      prompt = randomPrompt.question;
+    } else {
+      prompt = getRandomWarmPrompt().question;
+    }
+    setStarterPrompt(prompt);
+
+    // Fetch stories count
     const fetchStoriesCount = async () => {
       try {
         const response = await fetch('/api/stories');
@@ -96,6 +133,7 @@ export default function ConversationPage() {
     return () => { if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current); };
   }, [messages, isListening, resetInactivityTimer]);
 
+  // Name detection from conversation
   useEffect(() => {
     if (messages.length >= 2) {
       const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -117,15 +155,28 @@ export default function ConversationPage() {
     setIsProcessing(true);
     resetInactivityTimer();
 
+    // Process the message through style analyzer
+    const updatedStyle = userStyleService.processMessage(content);
+
     const userMessage: Message = { id: Date.now().toString(), role: 'user', content: content.trim(), timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
 
     try {
+      // Send with full context for personalization
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMessage], userName, isFirstMessage: messages.length === 0 }),
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+          userName,
+          isFirstMessage: messages.length === 0,
+          selectedInterests,
+          isReturningUser: userContext.isReturningUser,
+          frequentlyMentionedPeople: updatedStyle.frequentlyMentionedPeople,
+          preferredTimeframes: updatedStyle.preferredTimeframes,
+          commonThemes: Object.keys(updatedStyle.commonThemes).slice(0, 5)
+        }),
       });
       if (!response.ok) throw new Error('Failed');
       const data = await response.json();
@@ -207,6 +258,11 @@ export default function ConversationPage() {
       const data = await response.json();
       setSavedStoryId(data.story.id);
       setSavedStoriesCount(prev => prev + 1);
+
+      // Record the story in session data
+      const style = userStyleService.getStyle();
+      userStyleService.recordStory(Object.keys(style.commonThemes));
+
       setShowSessionEnding(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save story.');
@@ -221,6 +277,18 @@ export default function ConversationPage() {
     setError(null);
     setShowSessionEnding(false);
     setShowEndPrompt(false);
+
+    // Generate a new starter prompt
+    const interests = interestService.get();
+    let prompt: string;
+    if (interests.length > 0) {
+      const matchingPrompts = getPromptsForInterests(interests);
+      const randomPrompt = matchingPrompts[Math.floor(Math.random() * matchingPrompts.length)];
+      prompt = randomPrompt.question;
+    } else {
+      prompt = getRandomWarmPrompt().question;
+    }
+    setStarterPrompt(prompt);
   };
 
   if (showSessionEnding) {
@@ -254,6 +322,9 @@ export default function ConversationPage() {
           <div className="absolute inset-0 bg-[#0a0908]/90 backdrop-blur-sm" />
           <div className="relative bg-[#151312] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center">
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Save your story?</h3>
+            <p className="text-sm text-[#f9f7f2]/50 mb-4">
+              Thank you for sharing. Would you like to preserve this memory?
+            </p>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowEndPrompt(false)} className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm">Keep Going</button>
               <button onClick={handleSaveStory} disabled={isSaving} className="flex-1 py-3 rounded-full text-white text-sm" style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}>
@@ -313,14 +384,18 @@ export default function ConversationPage() {
 
         {/* Fire area */}
         <div className={`relative flex flex-col items-center justify-end transition-all duration-700 ${messages.length === 0 ? 'h-[70vh]' : 'h-[40vh] min-h-[280px]'}`}>
-          {/* Welcome text */}
+          {/* Welcome text with personalized prompt */}
           {messages.length === 0 && !isListening && (
             <div className="absolute top-12 left-0 right-0 text-center px-6">
               <h1 className="text-3xl md:text-4xl font-serif text-[#f9f7f2]/90 mb-4">
-                {userName ? `Hello, ${userName}` : 'Hello'}
+                {userName ? (userContext.isReturningUser ? `Welcome back, ${userName}` : `Hello, ${userName}`) : 'Hello'}
               </h1>
               <p className="text-lg text-[#f9f7f2]/40 max-w-md mx-auto font-serif italic leading-relaxed">
                 {starterPrompt}
+              </p>
+              {/* Tap to start hint */}
+              <p className="text-sm text-[#f9f7f2]/20 mt-6">
+                Tap the fire to begin speaking
               </p>
             </div>
           )}
