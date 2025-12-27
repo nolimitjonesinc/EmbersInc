@@ -2,12 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { BreathingEmber } from '@/components/conversation/BreathingEmber';
-import { EmberParticles } from '@/components/conversation/EmberParticles';
+import { CampfireVisual } from '@/components/conversation/CampfireVisual';
 import { SessionEnding } from '@/components/conversation/SessionEnding';
 import { SilenceProgressBar } from '@/components/conversation/SilenceProgressBar';
 import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
-import { useSpeechRecognition, SilenceStage } from '@/lib/speech/useSpeechRecognition';
+import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { Message } from '@/types';
 import { getStarterPrompts } from '@/lib/utils/chapters';
 import { getPersona, DEFAULT_PERSONA } from '@/lib/personas/definitions';
@@ -30,13 +29,11 @@ const END_PHRASES = [
   "that's all for now",
 ];
 
-// Check if transcript contains end phrases
 function detectEndPhrase(text: string): boolean {
   const lowerText = text.toLowerCase();
   return END_PHRASES.some((phrase) => lowerText.includes(phrase));
 }
 
-// Inactivity timeout (6 minutes like iOS)
 const INACTIVITY_TIMEOUT = 6 * 60 * 1000;
 
 export default function ConversationPage() {
@@ -52,25 +49,36 @@ export default function ConversationPage() {
   const [showSessionEnding, setShowSessionEnding] = useState(false);
   const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
+  const [savedStoriesCount, setSavedStoriesCount] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
 
-  // Get a starter prompt for the first message
   const [starterPrompt] = useState(() => getStarterPrompts()[0]);
   const persona = getPersona(DEFAULT_PERSONA);
 
-  // Load stored name on mount
   useEffect(() => {
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) {
       setUserName(storedName);
     }
+    // Get saved stories count for ember display
+    const fetchStoriesCount = async () => {
+      try {
+        const response = await fetch('/api/stories');
+        if (response.ok) {
+          const data = await response.json();
+          setSavedStoriesCount(data.stories?.length || 0);
+        }
+      } catch {
+        // Ignore errors
+      }
+    };
+    fetchStoriesCount();
   }, []);
 
-  // Reset inactivity timer
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
@@ -83,10 +91,8 @@ export default function ConversationPage() {
     }, INACTIVITY_TIMEOUT);
   }, [messages.length]);
 
-  // Handle silence auto-send
   const handleSilence = useCallback(() => {
     if (transcript && !isProcessing && !isPaused) {
-      // Check for end phrases before sending
       if (detectEndPhrase(transcript)) {
         setShowEndPrompt(true);
       }
@@ -112,19 +118,16 @@ export default function ConversationPage() {
     silenceTimeout: 5000,
   });
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Show speech error
   useEffect(() => {
     if (speechError) {
       setError(speechError);
     }
   }, [speechError]);
 
-  // Reset inactivity timer on any activity
   useEffect(() => {
     resetInactivityTimer();
     return () => {
@@ -134,7 +137,6 @@ export default function ConversationPage() {
     };
   }, [messages, isListening, resetInactivityTimer]);
 
-  // Extract name from conversation if AI asks and user responds
   useEffect(() => {
     if (messages.length >= 2) {
       const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -155,7 +157,6 @@ export default function ConversationPage() {
     }
   }, [messages]);
 
-  // Send message to API
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isProcessing) return;
 
@@ -199,11 +200,7 @@ export default function ConversationPage() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-
-      // Mark that we should auto-resume listening after speaking
       shouldAutoResumeRef.current = true;
-
-      // Auto-play the response
       await playAudio(data.message);
     } catch (err) {
       setError('Something went wrong. Please try again.');
@@ -213,7 +210,6 @@ export default function ConversationPage() {
     }
   };
 
-  // Play TTS audio
   const playAudio = async (text: string) => {
     try {
       setIsSpeaking(true);
@@ -242,12 +238,11 @@ export default function ConversationPage() {
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
 
-        // Auto-resume listening after AI finishes speaking
         if (shouldAutoResumeRef.current && !isPaused && isSupported) {
           shouldAutoResumeRef.current = false;
           setTimeout(() => {
             startListening();
-          }, 500); // Small delay for natural feel
+          }, 500);
         }
       };
 
@@ -260,7 +255,6 @@ export default function ConversationPage() {
     } catch (err) {
       console.error('Audio playback error:', err);
       setIsSpeaking(false);
-      // Still try to auto-resume even if audio fails
       if (shouldAutoResumeRef.current && !isPaused && isSupported) {
         shouldAutoResumeRef.current = false;
         setTimeout(() => {
@@ -270,8 +264,9 @@ export default function ConversationPage() {
     }
   };
 
-  // Toggle voice recording
-  const handleVoiceToggle = () => {
+  const handleFireClick = () => {
+    if (isPaused || isSpeaking || isProcessing) return;
+
     if (isListening) {
       stopListening();
       if (transcript) {
@@ -284,7 +279,6 @@ export default function ConversationPage() {
     }
   };
 
-  // Pause/Resume conversation
   const handlePauseToggle = () => {
     if (isPaused) {
       setIsPaused(false);
@@ -302,11 +296,9 @@ export default function ConversationPage() {
     }
   };
 
-  // Handle text input submit
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputText.trim()) {
-      // Check for end phrases
       if (detectEndPhrase(inputText)) {
         setShowEndPrompt(true);
       }
@@ -314,7 +306,6 @@ export default function ConversationPage() {
     }
   };
 
-  // Save story and show ceremonial ending
   const handleSaveStory = async () => {
     if (messages.length < 2) {
       setError('Have a conversation first before saving a story.');
@@ -326,7 +317,6 @@ export default function ConversationPage() {
     setShowEndPrompt(false);
     setShowInactivityPrompt(false);
 
-    // Stop any ongoing listening/speaking
     stopListening();
     if (audioRef.current) {
       audioRef.current.pause();
@@ -354,6 +344,7 @@ export default function ConversationPage() {
 
       const data = await response.json();
       setSavedStoryId(data.story.id);
+      setSavedStoriesCount((prev) => prev + 1);
       setShowSessionEnding(true);
     } catch (err) {
       console.error('Save story error:', err);
@@ -365,13 +356,11 @@ export default function ConversationPage() {
     }
   };
 
-  // Handle inactivity prompt actions
   const handleInactivityContinue = () => {
     setShowInactivityPrompt(false);
     resetInactivityTimer();
   };
 
-  // Start a new conversation
   const handleNewConversation = () => {
     setMessages([]);
     setSavedStoryId(null);
@@ -381,7 +370,6 @@ export default function ConversationPage() {
     setIsPaused(false);
   };
 
-  // Show ceremonial ending after saving
   if (showSessionEnding) {
     return (
       <SessionEnding
@@ -392,31 +380,10 @@ export default function ConversationPage() {
     );
   }
 
-  // Get ember color based on silence stage
-  const getEmberStageColor = () => {
-    if (!isListening) return undefined;
-    switch (silenceStage) {
-      case 'detected':
-        return '#3B82F6'; // blue
-      case 'preparing':
-        return '#F97316'; // orange
-      case 'readyToSend':
-        return '#22C55E'; // green
-      default:
-        return undefined;
-    }
-  };
+  const hasActiveInput = transcript || interimTranscript;
 
   return (
-    <div className="min-h-screen flex flex-col recording-environment relative">
-      {/* Grain overlay */}
-      <div className="recording-grain" />
-      {/* Vignette */}
-      <div className="recording-vignette" />
-
-      {/* Particles - more active when listening */}
-      <EmberParticles isActive={isListening || isProcessing || messages.length === 0} intensity={isListening ? 'medium' : 'low'} />
-
+    <div className="min-h-screen flex flex-col bg-[#0d0c0b] relative overflow-hidden">
       {/* Inactivity prompt */}
       <InactivityPrompt
         isVisible={showInactivityPrompt}
@@ -427,7 +394,7 @@ export default function ConversationPage() {
       {/* End phrase detected prompt */}
       {showEndPrompt && messages.length >= 2 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-[#1a1714]/80 backdrop-blur-md" />
+          <div className="absolute inset-0 bg-[#0d0c0b]/90 backdrop-blur-md" />
           <div className="relative bg-[#1a1714] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center animate-fade-up">
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">
               Ready to save your story?
@@ -457,38 +424,31 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Header - minimal, transparent */}
-      <header className="sticky top-0 z-40 bg-recording-bg/80 backdrop-blur-md border-b border-white/5">
+      {/* Minimal header - fades when listening */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-500 ${
+          isListening ? 'opacity-30' : 'opacity-100'
+        }`}
+      >
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <span
-              className="w-3 h-3 rounded-full"
-              style={{
-                background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
-                boxShadow: '0 0 10px 3px rgba(232, 109, 72, 0.4)',
-              }}
-            />
-            <span className="text-lg font-serif text-text-soft group-hover:text-text-warm transition-colors">
+            <span className="text-lg font-serif text-[#f9f7f2]/60 group-hover:text-[#f9f7f2] transition-colors">
               Embers
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <span className="text-text-whisper text-sm hidden sm:inline">
-              <span className="mr-1">{persona.avatar}</span>
-              {persona.name}
-            </span>
             {messages.length >= 2 && !savedStoryId && (
               <button
                 onClick={handleSaveStory}
                 disabled={isSaving}
-                className="recording-btn-finish text-xs py-2 px-4"
+                className="text-xs py-2 px-4 rounded-full border border-[#E86D48]/30 text-[#E86D48] hover:bg-[#E86D48]/10 transition-all"
               >
                 {isSaving ? 'Saving...' : 'Save Story'}
               </button>
             )}
             <Link
               href="/stories"
-              className="text-text-whisper hover:text-text-soft text-sm transition-colors"
+              className="text-[#f9f7f2]/40 hover:text-[#f9f7f2]/70 text-sm transition-colors"
             >
               My Stories
             </Link>
@@ -496,187 +456,167 @@ export default function ConversationPage() {
         </div>
       </header>
 
-      {/* Messages area */}
-      <main className="flex-1 overflow-y-auto relative z-10">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-          {/* Initial state - centered ember with prompt */}
-          {messages.length === 0 && !isListening && !isProcessing && (
-            <div className="text-center py-20 space-y-8">
-              <div className="relative w-36 h-36 mx-auto">
-                <BreathingEmber
-                  isListening={isListening}
-                  isProcessing={isProcessing}
-                  isSpeaking={isSpeaking}
-                  isWaiting={false}
-                  onClick={handleVoiceToggle}
-                  disabled={!isSupported}
-                  stageColor={getEmberStageColor()}
-                />
-              </div>
-
-              <div className="space-y-4 animate-fade-up-delay-1">
-                <p className="recording-greeting">
-                  {userName ? `Welcome back, ${userName}.` : "Hello. I'm here to listen."}
-                </p>
-                <p className="recording-prompt">{starterPrompt}</p>
-              </div>
-
-              {!isSupported && (
-                <p className="text-sm text-red-400">
-                  Voice not supported. Please use Chrome, Edge, or Safari.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Conversation in progress */}
-          {(messages.length > 0 || isListening || isProcessing) && (
-            <>
-              {/* Messages */}
+      {/* Main content area - the fire takes center stage */}
+      <main className="flex-1 flex flex-col">
+        {/* Messages area - floats above fire, scrollable */}
+        {messages.length > 0 && (
+          <div className="flex-1 overflow-y-auto pt-16 pb-4 px-4">
+            <div className="max-w-2xl mx-auto space-y-6">
               {messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] md:max-w-[75%] rounded-2xl px-6 py-4 ${
+                    className={`max-w-[85%] rounded-2xl px-5 py-3 ${
                       message.role === 'user'
-                        ? 'recording-message-user rounded-br-sm'
-                        : 'recording-message-assistant rounded-bl-sm'
+                        ? 'bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-br-sm'
+                        : 'bg-white/5 border border-white/10 rounded-bl-sm'
                     }`}
                   >
-                    <p className="text-lg leading-relaxed font-serif">{message.content}</p>
+                    <p className="text-base leading-relaxed font-serif text-[#f9f7f2]/90">
+                      {message.content}
+                    </p>
                   </div>
                 </div>
               ))}
 
-              {/* Current transcript while speaking */}
-              {(transcript || interimTranscript) && (
+              {/* Live transcript */}
+              {hasActiveInput && (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] md:max-w-[75%] rounded-2xl px-6 py-4 recording-message-user rounded-br-sm opacity-70 border-2 border-dashed border-ember-orange/50">
-                    <p className="text-lg leading-relaxed font-serif">
+                  <div className="max-w-[85%] rounded-2xl px-5 py-3 bg-[#E86D48]/10 border-2 border-dashed border-[#E86D48]/40 rounded-br-sm">
+                    <p className="text-base leading-relaxed font-serif text-[#f9f7f2]/70">
                       {transcript}
                       <span className="opacity-50">{interimTranscript}</span>
                     </p>
-                    <p className="text-xs opacity-60 mt-2">Speaking...</p>
                   </div>
                 </div>
               )}
 
-              {/* Processing indicator */}
               {isProcessing && (
                 <div className="flex justify-start">
-                  <div className="recording-message-assistant rounded-2xl px-6 py-4 rounded-bl-sm">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="w-3 h-3 rounded-full animate-pulse"
-                        style={{
-                          background: 'radial-gradient(circle, #f4a574, #E86D48)',
-                          boxShadow: '0 0 8px 2px rgba(232, 109, 72, 0.4)',
-                        }}
-                      />
-                      <span className="text-text-soft font-serif">Thinking...</span>
-                    </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 rounded-bl-sm">
+                    <p className="text-[#f9f7f2]/50 font-serif">Thinking...</p>
                   </div>
                 </div>
               )}
 
               <div ref={messagesEndRef} />
-            </>
+            </div>
+          </div>
+        )}
+
+        {/* The Fire - Hero element */}
+        <div
+          className={`relative transition-all duration-700 ${
+            messages.length === 0 ? 'flex-1 min-h-[60vh]' : 'h-[35vh] min-h-[250px]'
+          }`}
+        >
+          {/* Welcome text - only on first visit */}
+          {messages.length === 0 && !isListening && !isProcessing && (
+            <div className="absolute top-8 left-0 right-0 text-center z-10 px-4">
+              <p className="text-2xl md:text-3xl font-serif text-[#f9f7f2]/80 mb-3">
+                {userName ? `Welcome back, ${userName}.` : 'Welcome.'}
+              </p>
+              <p className="text-lg text-[#f9f7f2]/50 max-w-md mx-auto font-serif italic">
+                {starterPrompt}
+              </p>
+            </div>
+          )}
+
+          {/* The campfire */}
+          <CampfireVisual
+            isActive={!!(transcript || interimTranscript)}
+            isListening={isListening}
+            isSpeaking={isSpeaking}
+            isProcessing={isProcessing}
+            onFireClick={handleFireClick}
+            showEmbers={savedStoriesCount}
+          />
+
+          {/* Silence progress bar */}
+          {isListening && hasActiveInput && silenceStage !== 'none' && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10">
+              <SilenceProgressBar
+                stage={silenceStage}
+                progress={silenceDuration}
+                message={silenceMessage}
+                isVisible={true}
+              />
+            </div>
           )}
         </div>
       </main>
 
       {/* Error message */}
       {error && (
-        <div className="bg-red-500/10 border-t border-red-500/20 px-4 py-3 relative z-20">
-          <p className="text-center text-red-400">{error}</p>
+        <div className="fixed bottom-24 left-4 right-4 z-30">
+          <div className="max-w-md mx-auto bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+            <p className="text-center text-red-400 text-sm">{error}</p>
+          </div>
         </div>
       )}
 
-      {/* Voice controls - always visible */}
-      <footer className="sticky bottom-0 bg-recording-bg/90 backdrop-blur-md border-t border-white/5 relative z-20">
-        <div className="max-w-3xl mx-auto px-4 py-6">
-          {/* Control buttons row */}
-          <div className="flex items-center justify-center gap-6 mb-4">
-            {/* Pause/Resume button */}
+      {/* Bottom controls - minimal */}
+      <footer className="relative z-20 bg-gradient-to-t from-[#0d0c0b] via-[#0d0c0b] to-transparent pt-8 pb-6 px-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Pause indicator */}
+          {isPaused && (
+            <p className="text-center text-[#f9f7f2]/40 text-sm mb-4">
+              Paused
+            </p>
+          )}
+
+          {/* Control row */}
+          <div className="flex items-center gap-4">
+            {/* Pause button */}
             <button
               onClick={handlePauseToggle}
               disabled={!isSupported || isProcessing}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 isPaused
-                  ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                  : 'bg-white/5 border border-white/10 text-text-whisper hover:bg-white/10'
+                  ? 'bg-green-500/20 border border-green-500/40 text-green-400'
+                  : 'bg-white/5 border border-white/10 text-[#f9f7f2]/40 hover:bg-white/10'
               }`}
               aria-label={isPaused ? 'Resume' : 'Pause'}
             >
               {isPaused ? (
-                // Play icon
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               ) : (
-                // Pause icon
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                 </svg>
               )}
             </button>
 
-            {/* Main ember button */}
-            <div className="relative">
-              <BreathingEmber
-                isListening={isListening}
-                isProcessing={isProcessing}
-                isSpeaking={isSpeaking}
-                isWaiting={false}
-                onClick={handleVoiceToggle}
-                disabled={!isSupported || isSpeaking || isProcessing || isPaused}
-                stageColor={getEmberStageColor()}
+            {/* Text input */}
+            <form onSubmit={handleTextSubmit} className="flex-1 flex gap-3">
+              <input
+                type="text"
+                placeholder="Or type here..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                disabled={isProcessing || isPaused}
+                className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50 transition-colors text-sm"
               />
-            </div>
-
-            {/* Spacer for symmetry */}
-            <div className="w-12" />
+              <button
+                type="submit"
+                disabled={isProcessing || !inputText.trim() || isPaused}
+                className="px-5 py-3 rounded-full text-sm transition-all disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/30 text-[#E86D48] hover:bg-[#E86D48]/30"
+              >
+                Send
+              </button>
+            </form>
           </div>
 
-          {/* Silence progress bar - shown when listening and has content */}
-          {isListening && (transcript || interimTranscript) && (
-            <div className="flex justify-center mb-4">
-              <SilenceProgressBar
-                stage={silenceStage}
-                progress={silenceDuration}
-                message={silenceMessage}
-                isVisible={silenceStage !== 'none'}
-              />
-            </div>
-          )}
-
-          {/* Pause indicator */}
-          {isPaused && (
-            <p className="text-center text-text-whisper text-sm mb-4">
-              Paused — tap play to continue
+          {/* Voice not supported warning */}
+          {!isSupported && (
+            <p className="text-center text-red-400/70 text-xs mt-4">
+              Voice not supported in this browser. Please use Chrome, Edge, or Safari.
             </p>
           )}
-
-          {/* Text input fallback - subtle */}
-          <form onSubmit={handleTextSubmit} className="flex gap-3">
-            <input
-              type="text"
-              placeholder="Or type here..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              disabled={isProcessing || isPaused}
-              className="flex-1 bg-transparent border border-text-whisper/30 rounded-full px-5 py-3 text-text-warm placeholder:text-text-whisper focus:outline-none focus:border-ember-orange/50 transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={isProcessing || !inputText.trim() || isPaused}
-              className="recording-btn-finish px-6 disabled:opacity-30"
-            >
-              Send
-            </button>
-          </form>
         </div>
       </footer>
 
