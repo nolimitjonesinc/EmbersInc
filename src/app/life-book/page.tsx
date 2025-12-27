@@ -131,17 +131,27 @@ export default function LifeBookPage() {
             return (
               <div
                 key={chapter.id}
-                className="rounded-2xl border border-white/5 hover:border-white/10 transition-all cursor-pointer group overflow-hidden"
-                style={{
-                  background: `linear-gradient(135deg, ${chapter.color}10 0%, transparent 100%)`,
-                }}
+                className="rounded-2xl border border-white/5 hover:border-white/10 transition-all cursor-pointer group overflow-hidden relative"
                 onClick={() => setSelectedChapter(selectedChapter === chapter.id ? null : chapter.id)}
               >
-                <div className="p-6">
+                {/* Gradient background */}
+                <div
+                  className={`absolute inset-0 bg-gradient-to-br ${chapter.gradient} to-transparent opacity-60 group-hover:opacity-100 transition-opacity`}
+                />
+                <div
+                  className="absolute -top-4 -right-4 w-24 h-24 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl"
+                  style={{ backgroundColor: chapter.color }}
+                />
+
+                <div className="p-6 relative z-10">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-4xl group-hover:scale-110 transition-transform">
-                      {chapter.icon}
-                    </span>
+                    <span
+                      className="w-4 h-4 rounded-full group-hover:scale-125 transition-transform"
+                      style={{
+                        background: `radial-gradient(circle at 30% 30%, ${chapter.color}80, ${chapter.color})`,
+                        boxShadow: `0 0 12px 3px ${chapter.color}40`,
+                      }}
+                    />
                     <span
                       className="px-3 py-1 rounded-full text-xs"
                       style={{
@@ -200,7 +210,13 @@ export default function LifeBookPage() {
                 <>
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-5">
-                      <span className="text-5xl">{chapter.icon}</span>
+                      <span
+                        className="w-12 h-12 rounded-full"
+                        style={{
+                          background: `radial-gradient(circle at 30% 30%, ${chapter.color}80, ${chapter.color})`,
+                          boxShadow: `0 0 24px 8px ${chapter.color}40`,
+                        }}
+                      />
                       <div>
                         <h2 className="text-2xl font-serif">{chapter.title}</h2>
                         <p className="text-[#f9f7f2]/50">{chapter.description}</p>

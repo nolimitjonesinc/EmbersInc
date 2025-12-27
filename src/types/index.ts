@@ -16,6 +16,7 @@ export interface Chapter {
   description: string;
   icon: string;
   color: string;
+  gradient: string;
   prompts: string[];
 }
 

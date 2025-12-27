@@ -157,13 +157,17 @@ export default function StoriesPage() {
                 <button
                   key={chapter.id}
                   onClick={() => setFilter(chapter.id)}
-                  className={`px-4 py-2 rounded-full text-sm transition-all whitespace-nowrap ${
+                  className={`px-4 py-2 rounded-full text-sm transition-all whitespace-nowrap flex items-center gap-2 ${
                     filter === chapter.id
                       ? 'bg-[#E86D48] text-white'
                       : 'bg-white/5 text-[#f9f7f2]/60 hover:bg-white/10'
                   }`}
                 >
-                  {chapter.icon} {chapter.title}
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: chapter.color }}
+                  />
+                  {chapter.title}
                 </button>
               ))}
             </div>
@@ -178,14 +182,23 @@ export default function StoriesPage() {
               return (
                 <div
                   key={story.id}
-                  className="rounded-2xl border border-white/5 hover:border-white/10 transition-all cursor-pointer group overflow-hidden"
-                  style={{
-                    background: `linear-gradient(135deg, ${chapterInfo?.color || '#E86D48'}08 0%, transparent 100%)`,
-                  }}
+                  className="rounded-2xl border border-white/5 hover:border-white/10 transition-all cursor-pointer group overflow-hidden relative"
                 >
-                  <div className="p-6">
+                  {/* Gradient background */}
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${chapterInfo?.gradient || 'from-orange-500/20 via-amber-500/10'} to-transparent opacity-60 group-hover:opacity-100 transition-opacity`}
+                  />
+                  <div
+                    className="absolute -top-4 -right-4 w-24 h-24 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl"
+                    style={{ backgroundColor: chapterInfo?.color || '#E86D48' }}
+                  />
+
+                  <div className="p-6 relative z-10">
                     <div className="flex items-center gap-2 text-sm text-[#f9f7f2]/40 mb-3">
-                      <span>{chapterInfo?.icon}</span>
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: chapterInfo?.color || '#E86D48' }}
+                      />
                       <span>{chapterInfo?.title}</span>
                     </div>
                     <h3 className="text-xl font-serif mb-3 group-hover:text-[#E86D48] transition-colors line-clamp-2">

@@ -189,23 +189,30 @@ export default function Home() {
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { icon: '🌟', title: 'Who I Am', color: '#E86D48' },
-                { icon: '🏡', title: 'Where I Come From', color: '#8B5E3C' },
-                { icon: '❤️', title: "What I've Loved", color: '#D64545' },
-                { icon: '📚', title: "What I've Learned", color: '#5DADE2' },
-                { icon: '🌧️', title: "What's Been Hard", color: '#5D6D7E' },
-                { icon: '🔮', title: "Still Figuring Out", color: '#9B59B6' },
-                { icon: '💌', title: 'What I Want You to Know', color: '#F5A623' },
+                { title: 'Who I Am', color: '#E86D48', gradient: 'from-orange-500/20 via-amber-500/10' },
+                { title: 'Where I Come From', color: '#8B5E3C', gradient: 'from-amber-700/20 via-stone-600/10' },
+                { title: "What I've Loved", color: '#D64545', gradient: 'from-rose-500/20 via-red-600/10' },
+                { title: "What I've Learned", color: '#5DADE2', gradient: 'from-sky-400/20 via-blue-500/10' },
+                { title: "What's Been Hard", color: '#5D6D7E', gradient: 'from-slate-500/20 via-gray-600/10' },
+                { title: "Still Figuring Out", color: '#9B59B6', gradient: 'from-purple-500/20 via-violet-600/10' },
+                { title: 'What I Want You to Know', color: '#F5A623', gradient: 'from-amber-400/20 via-yellow-500/10' },
               ].map((chapter) => (
                 <div
                   key={chapter.title}
-                  className="p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all group cursor-pointer"
-                  style={{
-                    background: `linear-gradient(135deg, ${chapter.color}08 0%, transparent 100%)`,
-                  }}
+                  className={`relative p-6 rounded-2xl border border-white/5 hover:border-white/15 transition-all group cursor-pointer overflow-hidden`}
                 >
-                  <div className="text-3xl mb-3 group-hover:scale-110 transition-transform">{chapter.icon}</div>
-                  <h3 className="text-sm font-medium text-[#f9f7f2]/80">{chapter.title}</h3>
+                  {/* Gradient background */}
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${chapter.gradient} to-transparent opacity-60 group-hover:opacity-100 transition-opacity`}
+                  />
+                  {/* Subtle glow orb */}
+                  <div
+                    className="absolute -top-4 -right-4 w-24 h-24 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl"
+                    style={{ backgroundColor: chapter.color }}
+                  />
+                  <div className="relative z-10">
+                    <h3 className="text-base font-serif text-[#f9f7f2]/90 group-hover:text-[#f9f7f2] transition-colors">{chapter.title}</h3>
+                  </div>
                 </div>
               ))}
               <Link

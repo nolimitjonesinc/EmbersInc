@@ -5,8 +5,9 @@ export const chapters: Chapter[] = [
     id: 'who-i-am',
     title: 'Who I Am',
     description: 'Personal identity, values, and what makes you uniquely you',
-    icon: '🌟',
+    icon: '', // No longer using emojis
     color: '#E86D48',
+    gradient: 'from-orange-500/20 via-amber-500/10',
     prompts: [
       'What are three words your closest friends would use to describe you?',
       'What values do you hold most dear, and where did they come from?',
@@ -19,8 +20,9 @@ export const chapters: Chapter[] = [
     id: 'where-i-come-from',
     title: 'Where I Come From',
     description: 'Your roots, heritage, and family background',
-    icon: '🏡',
+    icon: '',
     color: '#8B5E3C',
+    gradient: 'from-amber-700/20 via-stone-600/10',
     prompts: [
       'What did your childhood home smell like?',
       'What family tradition do you cherish most?',
@@ -33,8 +35,9 @@ export const chapters: Chapter[] = [
     id: 'what-ive-loved',
     title: "What I've Loved",
     description: 'Joyful memories and meaningful experiences',
-    icon: '❤️',
+    icon: '',
     color: '#D64545',
+    gradient: 'from-rose-500/20 via-red-400/10',
     prompts: [
       'What moment made you realize you were in love?',
       'What hobby or passion has brought you the most joy?',
@@ -47,8 +50,9 @@ export const chapters: Chapter[] = [
     id: 'whats-been-hard',
     title: "What's Been Hard",
     description: 'Challenges faced and lessons in resilience',
-    icon: '🌧️',
+    icon: '',
     color: '#5D6D7E',
+    gradient: 'from-slate-500/20 via-gray-500/10',
     prompts: [
       'What challenge taught you the most about yourself?',
       'How did you get through the hardest time in your life?',
@@ -61,8 +65,9 @@ export const chapters: Chapter[] = [
     id: 'what-ive-learned',
     title: "What I've Learned",
     description: 'Wisdom gathered from life experiences',
-    icon: '📚',
+    icon: '',
     color: '#5DADE2',
+    gradient: 'from-sky-500/20 via-blue-400/10',
     prompts: [
       'What advice would you give your younger self?',
       'What did you learn from your biggest mistake?',
@@ -75,8 +80,9 @@ export const chapters: Chapter[] = [
     id: 'what-im-still-figuring-out',
     title: "What I'm Still Figuring Out",
     description: 'Ongoing questions and current explorations',
-    icon: '🔮',
+    icon: '',
     color: '#9B59B6',
+    gradient: 'from-purple-500/20 via-violet-400/10',
     prompts: [
       'What questions do you still wrestle with?',
       'What dreams haven\'t you pursued yet?',
@@ -89,8 +95,9 @@ export const chapters: Chapter[] = [
     id: 'what-i-want-you-to-know',
     title: 'What I Want You to Know',
     description: 'Messages to pass on to loved ones',
-    icon: '💌',
+    icon: '',
     color: '#F5A623',
+    gradient: 'from-amber-500/20 via-yellow-400/10',
     prompts: [
       'What do you most want your grandchildren to know about you?',
       'What family stories must be passed down?',
