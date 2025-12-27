@@ -6,6 +6,8 @@
   --ember-red: #D64545;
   --ember-gold: #F5A623;
   --ember-brown: #8B5E3C;
+  --ember-glow: rgba(232, 109, 72, 0.5);
+  --ember-glow-soft: rgba(232, 109, 72, 0.2);
 
   /* UI Colors */
   --background: #FFFAF5;
@@ -19,6 +21,13 @@
   --warning: #F5A623;
   --error: #E74C3C;
   --info: #5DADE2;
+
+  /* Dark Recording Environment */
+  --recording-bg: #121110;
+  --recording-bg-warm: #1a1816;
+  --text-warm: #f9f7f2;
+  --text-soft: rgba(249, 247, 242, 0.65);
+  --text-whisper: rgba(249, 247, 242, 0.4);
 }
 
 @theme inline {
@@ -40,8 +49,14 @@
   --color-accent-foreground: var(--foreground);
   --color-destructive: var(--error);
   --color-destructive-foreground: #FFFFFF;
+  --color-recording-bg: var(--recording-bg);
+  --color-recording-bg-warm: var(--recording-bg-warm);
+  --color-text-warm: var(--text-warm);
+  --color-text-soft: var(--text-soft);
+  --color-text-whisper: var(--text-whisper);
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-eb-garamond), 'EB Garamond', Georgia, 'Times New Roman', serif;
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -177,4 +192,236 @@ html {
 
 .voice-bar:nth-child(5) {
   animation-delay: 0.4s;
+}
+
+/* =====================================================
+   MEDITATIVE RECORDING ENVIRONMENT
+   ===================================================== */
+
+/* Serif font for emotional content */
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Recording environment wrapper */
+.recording-environment {
+  background: var(--recording-bg);
+  color: var(--text-warm);
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Warm vignette overlay */
+.recording-vignette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle grain texture overlay */
+.recording-grain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Breathing Ember Animations */
+@keyframes ember-breathe {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow:
+      0 0 40px 15px var(--ember-glow),
+      0 0 80px 30px var(--ember-glow-soft);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow:
+      0 0 50px 20px var(--ember-glow),
+      0 0 100px 40px var(--ember-glow-soft);
+  }
+}
+
+@keyframes ember-ring-expand {
+  0% {
+    width: 90px;
+    height: 90px;
+    opacity: 0.2;
+  }
+  100% {
+    width: 160px;
+    height: 160px;
+    opacity: 0;
+  }
+}
+
+@keyframes ember-ring-expand-outer {
+  0% {
+    width: 90px;
+    height: 90px;
+    opacity: 0.1;
+  }
+  100% {
+    width: 200px;
+    height: 200px;
+    opacity: 0;
+  }
+}
+
+@keyframes gentle-pulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* Ember particle rising animation */
+@keyframes ember-particle-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) translateX(var(--drift-x, 10px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* Fade up animation for text */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Gentle fade for session ending */
+@keyframes gentle-fade {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.animate-ember-breathe {
+  animation: ember-breathe 5s ease-in-out infinite;
+}
+
+.animate-ember-ring {
+  animation: ember-ring-expand 5s ease-in-out infinite;
+}
+
+.animate-ember-ring-outer {
+  animation: ember-ring-expand-outer 5s ease-in-out infinite 1.5s;
+}
+
+.animate-gentle-pulse {
+  animation: gentle-pulse 6s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: fade-up 2s forwards;
+}
+
+.animate-fade-up-delay-1 {
+  opacity: 0;
+  animation: fade-up 2s forwards 0.5s;
+}
+
+.animate-fade-up-delay-2 {
+  opacity: 0;
+  animation: fade-up 2s forwards 1.2s;
+}
+
+.animate-fade-up-delay-3 {
+  opacity: 0;
+  animation: fade-up 2s forwards 2s;
+}
+
+/* Recording text styles */
+.recording-greeting {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 1.75rem;
+  letter-spacing: -0.3px;
+  line-height: 1.4;
+  color: var(--text-warm);
+}
+
+.recording-prompt {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+/* Recording button styles */
+.recording-btn-finish {
+  background: transparent;
+  border: 1px solid var(--text-whisper);
+  color: var(--text-soft);
+  padding: 14px 32px;
+  border-radius: 30px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.4s ease;
+}
+
+.recording-btn-finish:hover {
+  border-color: var(--text-soft);
+  color: var(--text-warm);
+}
+
+.recording-btn-finish:active {
+  transform: scale(0.98);
+}
+
+/* Completion message styling */
+.completion-message {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  line-height: 1.8;
+  color: var(--text-soft);
+}
+
+/* Message bubbles for dark mode */
+.recording-message-user {
+  background: linear-gradient(135deg, var(--ember-orange) 0%, var(--ember-red) 100%);
+  color: white;
+}
+
+.recording-message-assistant {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-warm);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }

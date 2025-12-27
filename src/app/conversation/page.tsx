@@ -2,40 +2,59 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { VoiceButton } from '@/components/conversation/VoiceButton';
-import { MessageBubble } from '@/components/conversation/MessageBubble';
+import { BreathingEmber } from '@/components/conversation/BreathingEmber';
+import { EmberParticles } from '@/components/conversation/EmberParticles';
+import { SessionEnding } from '@/components/conversation/SessionEnding';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { Message } from '@/types';
 import { getStarterPrompts } from '@/lib/utils/chapters';
 import { PERSONAS, DEFAULT_PERSONA, getPersona } from '@/lib/personas/definitions';
 
 export default function ConversationPage() {
-  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isWaitingForUser, setIsWaitingForUser] = useState(false);
   const [userName, setUserName] = useState('');
   const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState(DEFAULT_PERSONA);
   const [isSaving, setIsSaving] = useState(false);
   const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
+  const [showSessionEnding, setShowSessionEnding] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get a starter prompt for the first message
   const [starterPrompt] = useState(() => getStarterPrompts()[0]);
+
+  // Handle extended silence - show "Take your time" after 8 seconds
+  const startSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    silenceTimerRef.current = setTimeout(() => {
+      setIsWaitingForUser(true);
+    }, 8000);
+  }, []);
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    setIsWaitingForUser(false);
+  }, []);
 
   // Handle silence - auto-send after user stops speaking
   const handleSilence = useCallback(() => {
     if (transcript && !isProcessing) {
       handleSendMessage(transcript);
       resetTranscript();
+      clearSilenceTimer();
     }
   }, []);
 
@@ -52,6 +71,15 @@ export default function ConversationPage() {
     onSilence: handleSilence,
     silenceTimeout: 5000,
   });
+
+  // Start silence timer when listening begins
+  useEffect(() => {
+    if (isListening && !transcript && !interimTranscript) {
+      startSilenceTimer();
+    } else {
+      clearSilenceTimer();
+    }
+  }, [isListening, transcript, interimTranscript, startSilenceTimer, clearSilenceTimer]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -196,7 +224,7 @@ export default function ConversationPage() {
     }
   };
 
-  // Save story to database
+  // Save story and show ceremonial ending
   const handleSaveStory = async () => {
     if (messages.length < 2) {
       setError('Have a conversation first before saving a story.');
@@ -207,9 +235,8 @@ export default function ConversationPage() {
     setError(null);
 
     try {
-      // Combine user messages as the story content
-      const userMessages = messages.filter(m => m.role === 'user');
-      const content = userMessages.map(m => m.content).join('\n\n');
+      const userMessages = messages.filter((m) => m.role === 'user');
+      const content = userMessages.map((m) => m.content).join('\n\n');
 
       const response = await fetch('/api/stories', {
         method: 'POST',
@@ -230,11 +257,13 @@ export default function ConversationPage() {
       const data = await response.json();
       setSavedStoryId(data.story.id);
 
-      // Show success - the story was saved
-      setError(null);
+      // Show the ceremonial ending
+      setShowSessionEnding(true);
     } catch (err) {
       console.error('Save story error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save story. Please try again.');
+      setError(
+        err instanceof Error ? err.message : 'Failed to save story. Please try again.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -245,62 +274,106 @@ export default function ConversationPage() {
     setMessages([]);
     setSavedStoryId(null);
     setError(null);
+    setShowSessionEnding(false);
   };
 
-  // Name prompt screen
+  // Show ceremonial ending after saving
+  if (showSessionEnding) {
+    return (
+      <SessionEnding
+        userName={userName}
+        storyId={savedStoryId || undefined}
+        onNewStory={handleNewConversation}
+      />
+    );
+  }
+
+  // Name prompt screen - dark themed
   if (showNamePrompt) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background">
-        <div className="max-w-md w-full text-center space-y-8">
-          <div className="space-y-4">
-            <span className="text-6xl">🔥</span>
-            <h1 className="text-3xl font-bold">Welcome to Embers</h1>
-            <p className="text-xl text-gray-600">
+      <div className="min-h-screen recording-environment flex flex-col items-center justify-center p-6 relative">
+        {/* Grain overlay */}
+        <div className="recording-grain" />
+        {/* Vignette */}
+        <div className="recording-vignette" />
+
+        {/* Particles */}
+        <EmberParticles isActive intensity="low" />
+
+        <div className="max-w-md w-full text-center space-y-10 relative z-10">
+          {/* Ember */}
+          <div className="relative w-32 h-32 mx-auto">
+            <span
+              className="absolute top-1/2 left-1/2 w-9 h-9 rounded-full animate-ember-breathe"
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: `
+                  0 0 40px 15px rgba(232, 109, 72, 0.5),
+                  0 0 80px 30px rgba(232, 109, 72, 0.2)
+                `,
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+          </div>
+
+          <div className="space-y-4 animate-fade-up-delay-1">
+            <h1 className="recording-greeting">Welcome to Embers</h1>
+            <p className="recording-prompt">
               I&apos;m excited to hear your stories. What should I call you?
             </p>
           </div>
 
-          <form onSubmit={handleNameSubmit} className="space-y-6">
-            <Input
+          <form onSubmit={handleNameSubmit} className="space-y-8 animate-fade-up-delay-2">
+            <input
               type="text"
               placeholder="Your name"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
-              className="text-center text-xl"
+              className="w-full bg-transparent border-b border-text-whisper text-center text-2xl font-serif text-text-warm placeholder:text-text-whisper py-3 focus:outline-none focus:border-ember-orange transition-colors"
               autoFocus
             />
 
-            {/* Persona selector */}
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">Who would you like to talk with?</p>
-              <div className="grid grid-cols-2 gap-2">
+            {/* Persona selector - subtle */}
+            <div className="space-y-4">
+              <p className="text-sm text-text-whisper">Who would you like to talk with?</p>
+              <div className="grid grid-cols-2 gap-3">
                 {Object.entries(PERSONAS).map(([key, persona]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setSelectedPersona(key)}
-                    className={`p-3 rounded-xl border-2 transition-all text-left ${
+                    className={`p-4 rounded-xl border transition-all text-left ${
                       selectedPersona === key
-                        ? 'border-ember-orange bg-ember-gradient/10'
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-ember-orange/50 bg-ember-orange/10'
+                        : 'border-text-whisper/20 hover:border-text-whisper/40'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{persona.avatar}</span>
-                      <span className="font-medium text-sm">{persona.name}</span>
+                      <span className="font-medium text-sm text-text-warm">
+                        {persona.name}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{persona.description}</p>
+                    <p className="text-xs text-text-whisper mt-1">{persona.description}</p>
                   </button>
                 ))}
               </div>
             </div>
 
-            <Button type="submit" size="lg" className="w-full" disabled={!userName.trim()}>
+            <button
+              type="submit"
+              disabled={!userName.trim()}
+              className="recording-btn-finish w-full disabled:opacity-30 disabled:cursor-not-allowed hover:bg-ember-orange/10"
+            >
               Let&apos;s Begin
-            </Button>
+            </button>
           </form>
 
-          <Link href="/" className="text-gray-500 hover:text-ember-orange transition-colors">
+          <Link
+            href="/"
+            className="text-text-whisper hover:text-text-soft transition-colors text-sm animate-fade-up-delay-3"
+          >
             ← Back to home
           </Link>
         </div>
@@ -311,169 +384,190 @@ export default function ConversationPage() {
   const currentPersona = getPersona(selectedPersona);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+    <div className="min-h-screen flex flex-col recording-environment relative">
+      {/* Grain overlay */}
+      <div className="recording-grain" />
+      {/* Vignette */}
+      <div className="recording-vignette" />
+
+      {/* Particles - more active when listening */}
+      <EmberParticles isActive={isListening} intensity={isListening ? 'medium' : 'low'} />
+
+      {/* Header - minimal, transparent */}
+      <header className="sticky top-0 z-50 bg-recording-bg/80 backdrop-blur-md border-b border-white/5">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🔥</span>
-            <span className="text-xl font-bold text-ember-gradient">Embers</span>
+          <Link href="/" className="flex items-center gap-2 group">
+            <span
+              className="w-3 h-3 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                boxShadow: '0 0 10px 3px rgba(232, 109, 72, 0.4)',
+              }}
+            />
+            <span className="text-lg font-serif text-text-soft group-hover:text-text-warm transition-colors">
+              Embers
+            </span>
           </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <span className="text-gray-600 hidden sm:inline">
+          <div className="flex items-center gap-3">
+            <span className="text-text-whisper text-sm hidden sm:inline">
               <span className="mr-1">{currentPersona.avatar}</span>
               {currentPersona.name}
             </span>
             {messages.length >= 2 && !savedStoryId && (
-              <Button
-                variant="default"
-                size="sm"
+              <button
                 onClick={handleSaveStory}
                 disabled={isSaving}
+                className="recording-btn-finish text-xs py-2 px-4"
               >
-                {isSaving ? 'Saving...' : '💾 Save Story'}
-              </Button>
+                {isSaving ? 'Saving...' : 'Save Story'}
+              </button>
             )}
-            {savedStoryId && (
-              <>
-                <span className="text-green-600 text-sm hidden sm:inline">✓ Saved</span>
-                <Button variant="outline" size="sm" onClick={handleNewConversation}>
-                  New Story
-                </Button>
-              </>
-            )}
-            <Button asChild variant="outline" size="sm">
-              <Link href="/stories">My Stories</Link>
-            </Button>
+            <Link
+              href="/stories"
+              className="text-text-whisper hover:text-text-soft text-sm transition-colors"
+            >
+              My Stories
+            </Link>
           </div>
         </div>
       </header>
 
-      {/* Saved story notification */}
-      {savedStoryId && (
-        <div className="bg-green-50 border-b border-green-200 px-4 py-3">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <p className="text-green-800">
-              ✓ Story saved successfully!
-            </p>
-            <div className="flex gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/stories">View Stories</Link>
-              </Button>
-              <Button size="sm" onClick={handleNewConversation}>
-                Start New Story
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Messages area */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-          {/* Initial prompt if no messages */}
-          {messages.length === 0 && (
-            <div className="text-center py-12 space-y-6">
-              <p className="text-xl text-gray-600">
-                Press the button below and share a memory. Here&apos;s a thought to get you started:
-              </p>
-              <p className="text-2xl font-medium text-ember-orange italic">
-                &ldquo;{starterPrompt}&rdquo;
-              </p>
-            </div>
-          )}
-
-          {/* Messages */}
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              onPlayAudio={
-                message.role === 'assistant' ? () => playAudio(message.content) : undefined
-              }
-            />
-          ))}
-
-          {/* Current transcript while speaking */}
-          {(transcript || interimTranscript) && (
-            <div className="flex justify-end">
-              <div className="max-w-[85%] md:max-w-[75%] rounded-2xl px-5 py-4 bg-ember-gradient/20 text-gray-700 rounded-br-sm border-2 border-dashed border-ember-orange">
-                <p className="text-lg leading-relaxed">
-                  {transcript}
-                  <span className="text-gray-400">{interimTranscript}</span>
-                </p>
-                <p className="text-xs text-gray-500 mt-2">Speaking...</p>
+      <main className="flex-1 overflow-y-auto relative z-10">
+        <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+          {/* Initial state - centered ember with prompt */}
+          {messages.length === 0 && !isListening && !isProcessing && (
+            <div className="text-center py-20 space-y-8">
+              <div className="relative w-36 h-36 mx-auto">
+                <BreathingEmber
+                  isListening={isListening}
+                  isProcessing={isProcessing}
+                  isSpeaking={isSpeaking}
+                  isWaiting={isWaitingForUser}
+                  onClick={handleVoiceToggle}
+                  disabled={!isSupported}
+                />
               </div>
+
+              <div className="space-y-4 animate-fade-up-delay-1">
+                <p className="recording-greeting">I&apos;m listening, {userName}.</p>
+                <p className="recording-prompt">{starterPrompt}</p>
+              </div>
+
+              {!isSupported && (
+                <p className="text-sm text-red-400">
+                  Voice not supported. Please use Chrome, Edge, or Safari.
+                </p>
+              )}
             </div>
           )}
 
-          {/* Processing indicator */}
-          {isProcessing && (
-            <div className="flex justify-start">
-              <div className="bg-white border border-gray-200 rounded-2xl px-5 py-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🔥</span>
-                  <span className="text-gray-500">Ember is thinking...</span>
-                  <div className="flex gap-1">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-2 h-2 bg-ember-orange rounded-full animate-bounce"
-                        style={{ animationDelay: `${i * 0.2}s` }}
-                      />
-                    ))}
+          {/* Conversation in progress */}
+          {(messages.length > 0 || isListening || isProcessing) && (
+            <>
+              {/* Messages */}
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`max-w-[85%] md:max-w-[75%] rounded-2xl px-6 py-4 ${
+                      message.role === 'user'
+                        ? 'recording-message-user rounded-br-sm'
+                        : 'recording-message-assistant rounded-bl-sm'
+                    }`}
+                  >
+                    <p className="text-lg leading-relaxed font-serif">{message.content}</p>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              ))}
 
-          <div ref={messagesEndRef} />
+              {/* Current transcript while speaking */}
+              {(transcript || interimTranscript) && (
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] md:max-w-[75%] rounded-2xl px-6 py-4 recording-message-user rounded-br-sm opacity-70 border-2 border-dashed border-ember-orange/50">
+                    <p className="text-lg leading-relaxed font-serif">
+                      {transcript}
+                      <span className="opacity-50">{interimTranscript}</span>
+                    </p>
+                    <p className="text-xs opacity-60 mt-2">Speaking...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Processing indicator */}
+              {isProcessing && (
+                <div className="flex justify-start">
+                  <div className="recording-message-assistant rounded-2xl px-6 py-4 rounded-bl-sm">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="w-3 h-3 rounded-full animate-pulse"
+                        style={{
+                          background:
+                            'radial-gradient(circle, #f4a574, #E86D48)',
+                          boxShadow: '0 0 8px 2px rgba(232, 109, 72, 0.4)',
+                        }}
+                      />
+                      <span className="text-text-soft font-serif">Thinking...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </>
+          )}
         </div>
       </main>
 
       {/* Error message */}
       {error && (
-        <div className="bg-red-50 border-t border-red-200 px-4 py-3">
-          <p className="text-center text-red-600">{error}</p>
+        <div className="bg-red-500/10 border-t border-red-500/20 px-4 py-3 relative z-20">
+          <p className="text-center text-red-400">{error}</p>
         </div>
       )}
 
-      {/* Voice controls */}
-      <footer className="sticky bottom-0 bg-white border-t border-gray-100 shadow-lg">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          {/* Voice button */}
-          <div className="flex flex-col items-center mb-6">
-            <VoiceButton
-              isListening={isListening}
-              isProcessing={isProcessing}
-              isSpeaking={isSpeaking}
-              onClick={handleVoiceToggle}
-              disabled={!isSupported}
-            />
-            {!isSupported && (
-              <p className="text-sm text-red-500 mt-2">
-                Voice not supported. Please use Chrome, Edge, or Safari.
-              </p>
-            )}
-          </div>
+      {/* Voice controls - always visible once conversation starts */}
+      {(messages.length > 0 || isListening || isProcessing) && (
+        <footer className="sticky bottom-0 bg-recording-bg/90 backdrop-blur-md border-t border-white/5 relative z-20">
+          <div className="max-w-3xl mx-auto px-4 py-6">
+            {/* Centered ember button */}
+            <div className="flex flex-col items-center mb-6">
+              <BreathingEmber
+                isListening={isListening}
+                isProcessing={isProcessing}
+                isSpeaking={isSpeaking}
+                isWaiting={isWaitingForUser}
+                onClick={handleVoiceToggle}
+                disabled={!isSupported || isSpeaking || isProcessing}
+              />
+            </div>
 
-          {/* Text input fallback */}
-          <form onSubmit={handleTextSubmit} className="flex gap-3">
-            <Input
-              type="text"
-              placeholder="Or type your message here..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              disabled={isProcessing}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isProcessing || !inputText.trim()}>
-              Send
-            </Button>
-          </form>
-        </div>
-      </footer>
+            {/* Text input fallback - subtle */}
+            <form onSubmit={handleTextSubmit} className="flex gap-3">
+              <input
+                type="text"
+                placeholder="Or type here..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                disabled={isProcessing}
+                className="flex-1 bg-transparent border border-text-whisper/30 rounded-full px-5 py-3 text-text-warm placeholder:text-text-whisper focus:outline-none focus:border-ember-orange/50 transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={isProcessing || !inputText.trim()}
+                className="recording-btn-finish px-6 disabled:opacity-30"
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </footer>
+      )}
 
       {/* Hidden audio element */}
       <audio ref={audioRef} className="hidden" />
