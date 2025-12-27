@@ -199,3 +199,13 @@ export const endSessionPrompts = [
 export function getEndSessionPrompt(): string {
   return endSessionPrompts[Math.floor(Math.random() * endSessionPrompts.length)]
 }
+
+/**
+ * Get a random warm prompt (for users without selected interests)
+ */
+export function getRandomWarmPrompt(): PromptWithFollowUp {
+  return allWarmPrompts[Math.floor(Math.random() * allWarmPrompts.length)]
+}
+
+// Re-export for convenience
+export { getPromptsForInterests } from './warmEngagementPrompts'
