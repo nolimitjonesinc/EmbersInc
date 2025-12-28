@@ -89,6 +89,31 @@ Think of me as a friend who's genuinely curious about your life. I'll ask questi
 
 const INACTIVITY_TIMEOUT = 6 * 60 * 1000;
 
+// Generate a brief summary of what was shared
+function generateConversationSummary(messages: Message[]): string {
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length === 0) return '';
+
+  // Extract key content from user messages
+  const content = userMessages.map(m => m.content).join(' ');
+
+  // Keep it brief - first 2-3 sentences worth
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const summaryParts = sentences.slice(0, 3).map(s => s.trim());
+
+  if (summaryParts.length === 0) return content.slice(0, 200);
+
+  let summary = summaryParts.join('. ');
+  if (summary.length > 300) {
+    summary = summary.slice(0, 297) + '...';
+  }
+  if (!summary.endsWith('.') && !summary.endsWith('...')) {
+    summary += '.';
+  }
+
+  return summary;
+}
+
 export default function ConversationPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -99,6 +124,7 @@ export default function ConversationPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
   const [savedStoryTitle, setSavedStoryTitle] = useState<string | null>(null);
+  const [conversationSummary, setConversationSummary] = useState<string | null>(null);
   const [showSessionEnding, setShowSessionEnding] = useState(false);
   const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
@@ -434,6 +460,10 @@ export default function ConversationPage() {
       setSavedStoryTitle(data.story.title || null);
       setSavedStoriesCount(prev => prev + 1);
 
+      // Generate summary of what was shared
+      const summary = generateConversationSummary(messages);
+      setConversationSummary(summary);
+
       // Record the story in session data
       const style = userStyleService.getStyle();
       userStyleService.recordStory(Object.keys(style.commonThemes));
@@ -478,6 +508,7 @@ export default function ConversationPage() {
         storyTitle={savedStoryTitle || undefined}
         mentionedPeople={style.frequentlyMentionedPeople}
         themes={Object.keys(style.commonThemes).slice(0, 5)}
+        conversationSummary={conversationSummary || undefined}
         onNewStory={handleNewConversation}
       />
     );

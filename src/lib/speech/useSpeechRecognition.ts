@@ -41,11 +41,11 @@ function getSilenceStage(duration: number): SilenceStage {
 function getSilenceMessage(stage: SilenceStage): string {
   switch (stage) {
     case 'detected':
-      return "I'm listening...";
+      return "Take your time... I'm here.";
     case 'preparing':
-      return 'Sending soon...';
+      return 'Whenever you\'re ready...';
     case 'readyToSend':
-      return 'Sending message';
+      return 'Sending your thoughts';
     default:
       return '';
   }

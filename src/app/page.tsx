@@ -70,7 +70,7 @@ export default function Home() {
         <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16">
           {/* The Flame - Central Focus */}
           <div className="relative mb-8">
-            <Link href="/conversation">
+            <Link href="/onboarding">
               <FlameButton size="large" />
             </Link>
           </div>
@@ -89,7 +89,7 @@ export default function Home() {
           {/* CTA */}
           <div className="mt-12 flex flex-col items-center gap-4">
             <Link
-              href="/conversation"
+              href="/onboarding"
               className="group relative px-10 py-4 rounded-full text-base tracking-wide transition-all overflow-hidden"
               style={{
                 background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',
@@ -100,7 +100,7 @@ export default function Home() {
               <span className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             </Link>
             <p className="text-xs text-[#f9f7f2]/25 tracking-wide">
-              No account needed. Just your voice and your memories.
+              Just your email, your voice, and your memories.
             </p>
           </div>
 
@@ -309,7 +309,7 @@ export default function Home() {
               Every memory you share becomes a gift that transcends time.
             </p>
             <Link
-              href="/conversation"
+              href="/onboarding"
               className="inline-block px-10 py-4 rounded-full text-base tracking-wide transition-all text-white"
               style={{
                 background: 'linear-gradient(135deg, #E86D48 0%, #c45a3a 100%)',

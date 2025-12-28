@@ -79,7 +79,10 @@ export function FlameButton({
   };
 
   const config = sizeConfig[size];
-  const intensity = isListening ? 1.25 : isSpeaking ? 0.85 : isProcessing ? 0.6 : 1;
+
+  // Visual states: listening = brighter/taller, speaking = calm/focused, processing = subdued
+  const intensity = isListening ? 1.25 : isSpeaking ? 1.0 : isProcessing ? 0.6 : 1;
+  const speakingMode = isSpeaking && !isListening;
 
   return (
     <div
@@ -382,6 +385,44 @@ export function FlameButton({
         </>
       )}
 
+      {/* Speaking mode - calm, rhythmic glow */}
+      {speakingMode && (
+        <>
+          {/* Soft breathing glow around flame base */}
+          <div
+            className="absolute bottom-[18%] left-1/2 rounded-full pointer-events-none"
+            style={{
+              width: 180 * config.scale,
+              height: 120 * config.scale,
+              background: 'radial-gradient(ellipse at center, rgba(255, 200, 130, 0.15) 0%, transparent 70%)',
+              transform: 'translateX(-50%)',
+              animation: 'speakingBreath 2s ease-in-out infinite',
+            }}
+          />
+          {/* Subtle wave rings - calmer than listening */}
+          <div
+            className="absolute bottom-[25%] left-1/2 rounded-full pointer-events-none"
+            style={{
+              width: 80 * config.scale,
+              height: 80 * config.scale,
+              border: '1px solid rgba(255, 220, 180, 0.15)',
+              transform: 'translateX(-50%)',
+              animation: 'speakingWave 3s ease-out infinite',
+            }}
+          />
+          <div
+            className="absolute bottom-[25%] left-1/2 rounded-full pointer-events-none"
+            style={{
+              width: 80 * config.scale,
+              height: 80 * config.scale,
+              border: '1px solid rgba(255, 220, 180, 0.1)',
+              transform: 'translateX(-50%)',
+              animation: 'speakingWave 3s ease-out infinite 1s',
+            }}
+          />
+        </>
+      )}
+
       {/* Story ember count */}
       {showEmberCount > 0 && (
         <div className="absolute bottom-[4%] left-1/2 -translate-x-1/2 flex gap-2">
@@ -491,6 +532,16 @@ export function FlameButton({
         @keyframes pulseRing {
           0% { transform: translateX(-50%) scale(1); opacity: 0.25; }
           100% { transform: translateX(-50%) scale(3); opacity: 0; }
+        }
+
+        @keyframes speakingBreath {
+          0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.6; }
+          50% { transform: translateX(-50%) scale(1.15); opacity: 1; }
+        }
+
+        @keyframes speakingWave {
+          0% { transform: translateX(-50%) scale(1); opacity: 0.15; }
+          100% { transform: translateX(-50%) scale(2.2); opacity: 0; }
         }
 
         @keyframes storyEmberGlow {

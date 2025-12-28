@@ -10,6 +10,7 @@ interface SessionEndingProps {
   mentionedPeople?: string[];
   themes?: string[];
   storyTitle?: string;
+  conversationSummary?: string;
 }
 
 // Therapeutic closing messages based on themes
@@ -132,9 +133,11 @@ export function SessionEnding({
   onNewStory,
   mentionedPeople = [],
   themes = [],
-  storyTitle
+  storyTitle,
+  conversationSummary
 }: SessionEndingProps) {
   const [showMessage, setShowMessage] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [showEnrichment, setShowEnrichment] = useState(false);
   const [showButtons, setShowButtons] = useState(false);
 
@@ -145,11 +148,13 @@ export function SessionEnding({
   useEffect(() => {
     // Stagger the animations for a gentle reveal
     const messageTimer = setTimeout(() => setShowMessage(true), 500);
-    const enrichmentTimer = setTimeout(() => setShowEnrichment(true), 1500);
-    const buttonTimer = setTimeout(() => setShowButtons(true), 2500);
+    const summaryTimer = setTimeout(() => setShowSummary(true), 1200);
+    const enrichmentTimer = setTimeout(() => setShowEnrichment(true), 2000);
+    const buttonTimer = setTimeout(() => setShowButtons(true), 3000);
 
     return () => {
       clearTimeout(messageTimer);
+      clearTimeout(summaryTimer);
       clearTimeout(enrichmentTimer);
       clearTimeout(buttonTimer);
     };
@@ -197,6 +202,22 @@ export function SessionEnding({
             {closingMessage}
           </p>
         </div>
+
+        {/* Conversation summary - what was shared */}
+        {conversationSummary && (
+          <div
+            className={`text-left bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 transition-all duration-1000 ${
+              showSummary ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            <p className="text-xs uppercase tracking-widest text-[#E86D48]/60 mb-3">
+              What you shared today
+            </p>
+            <p className="text-[#f9f7f2]/70 font-serif leading-relaxed text-sm">
+              {conversationSummary}
+            </p>
+          </div>
+        )}
 
         {/* Story enrichment / next steps */}
         <div

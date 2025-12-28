@@ -1,20 +1,41 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { interestCategories } from '@/data/interests'
 import { CategorySection } from '@/components/onboarding/CategorySection'
 import { interestService } from '@/lib/services/interestService'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { FlameButton } from '@/components/conversation/FlameButton'
 
-type OnboardingStep = 'welcome' | 'interests' | 'name' | 'ready'
+type OnboardingStep = 'welcome' | 'interests' | 'name' | 'safekeeping' | 'email-sent' | 'ready'
+
+// Voice scripts for each step
+const VOICE_SCRIPTS = {
+  welcome: `Hello. I'm Ember. I'm here to help you preserve the stories and memories that matter most to you. There's no pressure, no right or wrong way to do this. Just your voice, your memories, and all the time you need. Let me show you how this works.`,
+  safekeeping: `The memories you're about to share are precious. Before we begin, I'd like to make sure they're kept safe. Your email is simply your key back to everything we create together. Nothing else needed.`,
+  emailSent: `I just sent you a magic link. Check your email and click the link to continue. I'll be right here waiting.`,
+  ready: `You're all set. Remember, there's no rush. Just speak naturally, and I'll guide you along the way. Whenever you're ready, let's begin.`
+}
 
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState<OnboardingStep>('welcome')
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [selectedInterests, setSelectedInterests] = useState<Set<string>>(new Set())
+
+  // Voice state
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false)
+  const [hasPlayedWelcome, setHasPlayedWelcome] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Email state
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(false)
 
   // Load existing data on mount
   useEffect(() => {
@@ -26,6 +47,53 @@ export default function OnboardingPage() {
       setSelectedInterests(new Set(storedInterests))
     }
   }, [])
+
+  // Play voice for current step
+  const playVoice = async (text: string) => {
+    if (isPlayingVoice) return
+
+    setIsPlayingVoice(true)
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      })
+
+      if (!response.ok) throw new Error('TTS failed')
+
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+
+      if (audioRef.current) audioRef.current.pause()
+
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsPlayingVoice(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      audio.onerror = () => {
+        setIsPlayingVoice(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      await audio.play()
+    } catch {
+      setIsPlayingVoice(false)
+    }
+  }
+
+  // Auto-play welcome voice on first visit
+  const handleStartWelcome = () => {
+    if (!hasPlayedWelcome) {
+      setHasPlayedWelcome(true)
+      playVoice(VOICE_SCRIPTS.welcome)
+    }
+  }
 
   const handleToggleInterest = (interestId: string) => {
     setSelectedInterests(prev => {
@@ -48,22 +116,54 @@ export default function OnboardingPage() {
     e.preventDefault()
     if (name.trim()) {
       localStorage.setItem('embers_user_name', name.trim())
-      setStep('ready')
+      setStep('safekeeping')
+      // Play safekeeping voice after a short delay
+      setTimeout(() => playVoice(VOICE_SCRIPTS.safekeeping), 500)
     }
+  }
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email.trim()) return
+
+    setIsSendingEmail(true)
+    setEmailError(null)
+
+    try {
+      const supabase = getSupabaseBrowserClient()
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?redirect=/conversation`,
+        },
+      })
+
+      if (error) {
+        setEmailError(error.message)
+      } else {
+        setEmailSent(true)
+        setStep('email-sent')
+        setTimeout(() => playVoice(VOICE_SCRIPTS.emailSent), 500)
+      }
+    } catch {
+      setEmailError('Something went wrong. Please try again.')
+    } finally {
+      setIsSendingEmail(false)
+    }
+  }
+
+  const handleSkipSafekeeping = () => {
+    setStep('ready')
+    setTimeout(() => playVoice(VOICE_SCRIPTS.ready), 500)
+  }
+
+  const handleContinueWithoutEmail = () => {
+    setStep('ready')
+    setTimeout(() => playVoice(VOICE_SCRIPTS.ready), 500)
   }
 
   const handleStart = () => {
-    router.push('/conversation')
-  }
-
-  const handleSkipToConversation = () => {
-    // Save any selections made
-    if (selectedInterests.size > 0) {
-      interestService.save(Array.from(selectedInterests))
-    }
-    if (name.trim()) {
-      localStorage.setItem('embers_user_name', name.trim())
-    }
     router.push('/conversation')
   }
 
@@ -75,16 +175,17 @@ export default function OnboardingPage() {
           className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[70%]"
           style={{
             background: `radial-gradient(ellipse at center bottom,
-              rgba(232, 109, 72, 0.08) 0%,
-              rgba(196, 90, 58, 0.04) 30%,
-              transparent 60%)`
+              rgba(232, 109, 72, ${isPlayingVoice ? 0.15 : 0.08}) 0%,
+              rgba(196, 90, 58, ${isPlayingVoice ? 0.08 : 0.04}) 30%,
+              transparent 60%)`,
+            transition: 'all 0.5s ease-out'
           }}
         />
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col max-w-2xl mx-auto w-full px-6 py-8">
         <AnimatePresence mode="wait">
-          {/* Welcome Step */}
+          {/* Welcome Step - Now with Voice */}
           {step === 'welcome' && (
             <motion.div
               key="welcome"
@@ -93,44 +194,84 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
             >
-              {/* Ember glow */}
-              <div className="relative">
-                <div className="text-8xl">🔥</div>
-                <div className="absolute inset-0 blur-2xl bg-[#E86D48]/30 -z-10" />
+              {/* Animated Ember */}
+              <div className="relative mb-4">
+                <FlameButton
+                  isListening={false}
+                  isSpeaking={isPlayingVoice}
+                  isProcessing={false}
+                  onClick={handleStartWelcome}
+                  size="large"
+                />
               </div>
 
-              <div className="space-y-4">
+              {/* Speaking indicator */}
+              {isPlayingVoice && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
+                >
+                  Ember is speaking...
+                </motion.p>
+              )}
+
+              {/* Content - shows after or during voice */}
+              <motion.div
+                className="space-y-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: hasPlayedWelcome ? 1 : 0.3 }}
+                transition={{ delay: 0.5 }}
+              >
                 <h1 className="text-4xl font-serif font-bold text-[#f9f7f2]">
                   Welcome to Embers
                 </h1>
                 <p className="text-xl text-[#f9f7f2]/60 leading-relaxed max-w-md">
                   Your stories matter. Let&apos;s preserve them for your family, together.
                 </p>
-              </div>
+              </motion.div>
 
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-4 max-w-sm">
-                <h2 className="text-lg font-semibold text-[#f9f7f2]">Here&apos;s how it works:</h2>
-                <ul className="space-y-3">
-                  {[
-                    { icon: '🎙️', text: 'You talk, just like chatting with a friend' },
-                    { icon: '💬', text: 'I ask questions to help you remember more' },
-                    { icon: '📖', text: 'Your stories become a beautiful Life Book' },
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3">
-                      <span className="text-2xl">{item.icon}</span>
-                      <span className="text-[#f9f7f2]/80">{item.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {!hasPlayedWelcome ? (
+                <button
+                  onClick={handleStartWelcome}
+                  className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg"
+                  style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+                >
+                  Tap to Begin
+                </button>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 2 }}
+                  className="space-y-4 w-full max-w-sm"
+                >
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-4">
+                    <h2 className="text-lg font-semibold text-[#f9f7f2]">Here&apos;s how it works:</h2>
+                    <ul className="space-y-3">
+                      {[
+                        { icon: '🎙️', text: 'You talk, just like chatting with a friend' },
+                        { icon: '💬', text: 'I ask questions to help you remember more' },
+                        { icon: '📖', text: 'Your stories become a beautiful Life Book' },
+                      ].map((item, i) => (
+                        <li key={i} className="flex items-center gap-3">
+                          <span className="text-2xl">{item.icon}</span>
+                          <span className="text-[#f9f7f2]/80">{item.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
 
-              <button
-                onClick={() => setStep('interests')}
-                className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg"
-                style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-              >
-                Let&apos;s Get Started
-              </button>
+                  <button
+                    onClick={() => setStep('interests')}
+                    disabled={isPlayingVoice}
+                    className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+                  >
+                    Let&apos;s Get Started
+                  </button>
+                </motion.div>
+              )}
 
               <Link
                 href="/"
@@ -150,7 +291,6 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col"
             >
-              {/* Header */}
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-serif font-bold text-[#f9f7f2] mb-3">
                   What stories call to you?
@@ -160,7 +300,6 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {/* Selection count */}
               <div className="flex items-center justify-between mb-6">
                 <span className="text-sm text-[#f9f7f2]/40">
                   {selectedInterests.size === 0
@@ -175,7 +314,6 @@ export default function OnboardingPage() {
                 </button>
               </div>
 
-              {/* Categories */}
               <div className="flex-1 overflow-y-auto space-y-8 pb-24">
                 {interestCategories.map((category) => (
                   <CategorySection
@@ -187,7 +325,6 @@ export default function OnboardingPage() {
                 ))}
               </div>
 
-              {/* Fixed bottom button */}
               <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0a0908] via-[#0a0908] to-transparent">
                 <div className="max-w-2xl mx-auto">
                   <button
@@ -250,6 +387,149 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
+          {/* NEW: Safekeeping Step - Email Capture with Voice */}
+          {step === 'safekeeping' && (
+            <motion.div
+              key="safekeeping"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
+            >
+              {/* Small ember icon */}
+              <div className="relative">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'radial-gradient(circle at 30% 30%, #f4a574, #E86D48 50%, #c45a3a)',
+                    boxShadow: isPlayingVoice
+                      ? '0 0 60px 20px rgba(232, 109, 72, 0.5)'
+                      : '0 0 30px 10px rgba(232, 109, 72, 0.3)',
+                    transition: 'box-shadow 0.5s ease-out'
+                  }}
+                />
+              </div>
+
+              {isPlayingVoice && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
+                >
+                  Ember is speaking...
+                </motion.p>
+              )}
+
+              <div className="space-y-4">
+                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
+                  Keep your stories safe, {name}
+                </h1>
+                <p className="text-lg text-[#f9f7f2]/50 max-w-md leading-relaxed">
+                  Your email is your key back to everything we create together.
+                  <br />
+                  <span className="text-[#f9f7f2]/40">No password needed. Nothing else required.</span>
+                </p>
+              </div>
+
+              <form onSubmit={handleSendMagicLink} className="w-full max-w-sm space-y-4">
+                <div className="space-y-2">
+                  <input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoFocus
+                    className="w-full text-center text-xl py-4 px-6 bg-white/5 border border-white/20 rounded-xl text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50"
+                  />
+                  {emailError && (
+                    <p className="text-red-400 text-sm">{emailError}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!email.trim() || isSendingEmail}
+                  className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+                >
+                  {isSendingEmail ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Sending...
+                    </>
+                  ) : (
+                    'Send My Key'
+                  )}
+                </button>
+              </form>
+
+              <button
+                onClick={handleSkipSafekeeping}
+                className="text-[#f9f7f2]/30 hover:text-[#f9f7f2]/50 transition-colors text-sm"
+              >
+                Skip for now
+                <span className="block text-xs text-[#f9f7f2]/20 mt-1">
+                  (stories will only be saved on this device)
+                </span>
+              </button>
+            </motion.div>
+          )}
+
+          {/* NEW: Email Sent Step */}
+          {step === 'email-sent' && (
+            <motion.div
+              key="email-sent"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
+            >
+              <div className="relative">
+                <span className="text-6xl">✉️</span>
+                <div className="absolute inset-0 blur-2xl bg-[#E86D48]/20 -z-10" />
+              </div>
+
+              {isPlayingVoice && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
+                >
+                  Ember is speaking...
+                </motion.p>
+              )}
+
+              <div className="space-y-4">
+                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
+                  Check your email, {name}
+                </h1>
+                <p className="text-lg text-[#f9f7f2]/50 max-w-md">
+                  I sent a magic link to <span className="text-[#E86D48]">{email}</span>
+                </p>
+                <p className="text-[#f9f7f2]/40">
+                  Click the link in your email to continue.
+                  <br />
+                  I&apos;ll be right here waiting.
+                </p>
+              </div>
+
+              <div className="space-y-4 w-full max-w-sm">
+                <button
+                  onClick={handleContinueWithoutEmail}
+                  className="w-full py-4 rounded-full text-[#f9f7f2]/70 font-medium text-lg border border-white/10 hover:bg-white/5 transition-colors"
+                >
+                  Continue without waiting
+                </button>
+                <p className="text-xs text-[#f9f7f2]/30">
+                  You can verify your email later from settings
+                </p>
+              </div>
+            </motion.div>
+          )}
+
           {/* Ready Step */}
           {step === 'ready' && (
             <motion.div
@@ -259,8 +539,28 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
             >
+              {/* Animated ember */}
+              <div className="relative mb-4">
+                <FlameButton
+                  isListening={false}
+                  isSpeaking={isPlayingVoice}
+                  isProcessing={false}
+                  onClick={() => {}}
+                  size="medium"
+                />
+              </div>
+
+              {isPlayingVoice && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
+                >
+                  Ember is speaking...
+                </motion.p>
+              )}
+
               <div className="space-y-4">
-                <span className="text-6xl">✨</span>
                 <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
                   You&apos;re all set, {name}!
                 </h1>
@@ -292,7 +592,6 @@ export default function OnboardingPage() {
                 </ul>
               </div>
 
-              {/* Show selected interests */}
               {selectedInterests.size > 0 && (
                 <div className="text-sm text-[#f9f7f2]/40">
                   We&apos;ll explore stories about{' '}
@@ -305,19 +604,25 @@ export default function OnboardingPage() {
 
               <button
                 onClick={handleStart}
-                className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg"
+                disabled={isPlayingVoice}
+                className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
               >
                 Start My First Story
               </button>
 
-              <p className="text-sm text-[#f9f7f2]/40">
-                You can always come back and add more stories later.
-              </p>
+              {emailSent && (
+                <p className="text-sm text-green-400/60">
+                  ✓ Your stories will be saved to {email}
+                </p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Hidden audio element */}
+      <audio ref={audioRef} className="hidden" />
     </div>
   )
 }
