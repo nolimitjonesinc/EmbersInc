@@ -98,6 +98,7 @@ export default function ConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
+  const [savedStoryTitle, setSavedStoryTitle] = useState<string | null>(null);
   const [showSessionEnding, setShowSessionEnding] = useState(false);
   const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
@@ -430,6 +431,7 @@ export default function ConversationPage() {
       if (!response.ok) throw new Error('Failed to save');
       const data = await response.json();
       setSavedStoryId(data.story.id);
+      setSavedStoryTitle(data.story.title || null);
       setSavedStoriesCount(prev => prev + 1);
 
       // Record the story in session data
@@ -468,7 +470,17 @@ export default function ConversationPage() {
   };
 
   if (showSessionEnding) {
-    return <SessionEnding userName={userName} storyId={savedStoryId || undefined} onNewStory={handleNewConversation} />;
+    const style = userStyleService.getStyle();
+    return (
+      <SessionEnding
+        userName={userName}
+        storyId={savedStoryId || undefined}
+        storyTitle={savedStoryTitle || undefined}
+        mentionedPeople={style.frequentlyMentionedPeople}
+        themes={Object.keys(style.commonThemes).slice(0, 5)}
+        onNewStory={handleNewConversation}
+      />
+    );
   }
 
   const hasActiveInput = transcript || interimTranscript;

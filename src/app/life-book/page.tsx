@@ -257,9 +257,18 @@ export default function LifeBookPage() {
                       {chapterStories.map((story) => (
                         <div
                           key={story.id}
-                          className="p-5 bg-white/5 rounded-xl hover:bg-white/8 transition-colors cursor-pointer"
+                          className="p-5 bg-white/5 rounded-xl hover:bg-white/8 transition-colors group"
                         >
-                          <h4 className="font-serif text-lg mb-2">{story.title}</h4>
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-serif text-lg">{story.title}</h4>
+                            <Link
+                              href={`/stories/${story.id}/edit`}
+                              className="opacity-0 group-hover:opacity-100 text-xs px-3 py-1 rounded-full border border-[#E86D48]/30 text-[#E86D48]/70 hover:bg-[#E86D48]/10 transition-all"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Edit
+                            </Link>
+                          </div>
                           <p className="text-[#f9f7f2]/50 line-clamp-2 text-sm mb-3">
                             {story.narrative_prose || story.content}
                           </p>
