@@ -24,6 +24,69 @@ function detectEndPhrase(text: string): boolean {
   return END_PHRASES.some((phrase) => lowerText.includes(phrase));
 }
 
+// Sensory-based opening questions - low emotional stakes, easy to answer
+const OPENING_QUESTIONS = [
+  "What's a smell that instantly takes you back to a happy moment?",
+  "What sound from your childhood can you still hear perfectly in your mind?",
+  "If you close your eyes and think of your childhood home, what's the first thing you see?",
+  "Who's someone whose laugh you can still hear?",
+  "What's a taste that brings back memories for you?",
+  "What song takes you right back to a specific moment in your life?",
+  "Tell me about a place that always felt safe to you.",
+  "What's something small that a loved one did that you'll never forget?",
+];
+
+// Generate personalized greeting based on user context
+function generateVoiceIntroduction(
+  userName?: string,
+  isReturningUser?: boolean,
+  mentionedPeople?: string[],
+  commonThemes?: string[]
+): { greeting: string; question: string } {
+  // Returning user with context
+  if (isReturningUser && userName) {
+    const returningGreetings = [
+      `Welcome back, ${userName}. It's good to hear from you again.`,
+      `Hello again, ${userName}. I've been thinking about your stories.`,
+      `${userName}, welcome back. I'm glad you're here.`,
+    ];
+
+    let greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)];
+
+    // Personalize with mentioned people if available
+    if (mentionedPeople && mentionedPeople.length > 0) {
+      const person = mentionedPeople[Math.floor(Math.random() * mentionedPeople.length)];
+      return {
+        greeting,
+        question: `Last time you shared some wonderful stories. I'd love to hear more whenever you're ready. What memory has been on your mind lately? Or if you'd like, tell me more about ${person}.`
+      };
+    }
+
+    return {
+      greeting,
+      question: "What memory has been on your mind lately?"
+    };
+  }
+
+  // New user introduction
+  const newUserGreeting = userName
+    ? `Hello, ${userName}. I'm Ember.`
+    : "Hello. I'm Ember.";
+
+  const introduction = `${newUserGreeting}
+
+I'm here to help you capture the stories and memories that matter most to you. There's no pressure, no right or wrong way to do this. Just your voice, your memories, and all the time you need.
+
+Think of me as a friend who's genuinely curious about your life. I'll ask questions, and you share whatever comes to mind.`;
+
+  const question = OPENING_QUESTIONS[Math.floor(Math.random() * OPENING_QUESTIONS.length)];
+
+  return {
+    greeting: introduction,
+    question: `Let's start with something simple... ${question}`
+  };
+}
+
 const INACTIVITY_TIMEOUT = 6 * 60 * 1000;
 
 export default function ConversationPage() {
@@ -40,7 +103,11 @@ export default function ConversationPage() {
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [savedStoriesCount, setSavedStoriesCount] = useState(0);
 
-  // New state for personalization
+  // Voice introduction state
+  const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
+  const [isPlayingIntro, setIsPlayingIntro] = useState(false);
+
+  // Personalization state
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [userContext, setUserContext] = useState<{
     isReturningUser: boolean;
@@ -59,9 +126,17 @@ export default function ConversationPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
+  const introPlayedRef = useRef(false);
 
   // Load user data on mount
   useEffect(() => {
+    // Check if intro was already played this session
+    const introPlayed = sessionStorage.getItem('embers_intro_played');
+    if (introPlayed) {
+      setHasPlayedIntro(true);
+      introPlayedRef.current = true;
+    }
+
     // Load name
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) setUserName(storedName);
@@ -74,7 +149,7 @@ export default function ConversationPage() {
     const context = userStyleService.getContext();
     setUserContext(context);
 
-    // Generate personalized starter prompt
+    // Generate personalized starter prompt for display
     let prompt: string;
     if (interests.length > 0) {
       const matchingPrompts = getPromptsForInterests(interests);
@@ -149,6 +224,90 @@ export default function ConversationPage() {
     }
   }, [messages]);
 
+  // Play voice introduction
+  const playVoiceIntroduction = async () => {
+    if (introPlayedRef.current || isPlayingIntro) return;
+
+    setIsPlayingIntro(true);
+    introPlayedRef.current = true;
+
+    const { greeting, question } = generateVoiceIntroduction(
+      userName,
+      userContext.isReturningUser,
+      userContext.frequentlyMentionedPeople,
+      userContext.commonThemes
+    );
+
+    const fullIntroduction = `${greeting}\n\n${question}`;
+
+    // Add intro as first assistant message
+    const introMessage: Message = {
+      id: 'intro-' + Date.now(),
+      role: 'assistant',
+      content: fullIntroduction,
+      timestamp: new Date()
+    };
+    setMessages([introMessage]);
+
+    // Play the audio
+    try {
+      setIsSpeaking(true);
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: fullIntroduction })
+      });
+
+      if (!response.ok) throw new Error('TTS failed');
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      if (audioRef.current) audioRef.current.pause();
+
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        setIsPlayingIntro(false);
+        setHasPlayedIntro(true);
+        sessionStorage.setItem('embers_intro_played', 'true');
+        URL.revokeObjectURL(audioUrl);
+
+        // Automatically start listening after intro finishes
+        if (isSupported) {
+          setTimeout(() => startListening(), 600);
+        }
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        setIsPlayingIntro(false);
+        setHasPlayedIntro(true);
+        sessionStorage.setItem('embers_intro_played', 'true');
+        URL.revokeObjectURL(audioUrl);
+
+        // Still try to start listening
+        if (isSupported) {
+          setTimeout(() => startListening(), 600);
+        }
+      };
+
+      await audio.play();
+    } catch {
+      setIsSpeaking(false);
+      setIsPlayingIntro(false);
+      setHasPlayedIntro(true);
+      sessionStorage.setItem('embers_intro_played', 'true');
+
+      // Start listening even if TTS failed
+      if (isSupported) {
+        setTimeout(() => startListening(), 600);
+      }
+    }
+  };
+
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isProcessing) return;
     setError(null);
@@ -170,7 +329,7 @@ export default function ConversationPage() {
         body: JSON.stringify({
           messages: [...messages, userMessage],
           userName,
-          isFirstMessage: messages.length === 0,
+          isFirstMessage: messages.filter(m => m.role === 'user').length === 0,
           selectedInterests,
           isReturningUser: userContext.isReturningUser,
           frequentlyMentionedPeople: updatedStyle.frequentlyMentionedPeople,
@@ -220,7 +379,15 @@ export default function ConversationPage() {
   };
 
   const handleFireClick = () => {
-    if (isSpeaking || isProcessing) return;
+    if (isSpeaking || isProcessing || isPlayingIntro) return;
+
+    // If this is the first interaction and intro hasn't played, play it
+    if (messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {
+      playVoiceIntroduction();
+      return;
+    }
+
+    // Otherwise, normal behavior
     if (isListening) {
       stopListening();
       if (transcript) { handleSendMessage(transcript); resetTranscript(); }
@@ -233,6 +400,12 @@ export default function ConversationPage() {
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputText.trim()) {
+      // If intro hasn't played yet, mark it as played since user is typing
+      if (!hasPlayedIntro) {
+        setHasPlayedIntro(true);
+        sessionStorage.setItem('embers_intro_played', 'true');
+        introPlayedRef.current = true;
+      }
       if (detectEndPhrase(inputText)) setShowEndPrompt(true);
       handleSendMessage(inputText);
     }
@@ -277,6 +450,9 @@ export default function ConversationPage() {
     setError(null);
     setShowSessionEnding(false);
     setShowEndPrompt(false);
+    setHasPlayedIntro(false);
+    introPlayedRef.current = false;
+    sessionStorage.removeItem('embers_intro_played');
 
     // Generate a new starter prompt
     const interests = interestService.get();
@@ -305,8 +481,8 @@ export default function ConversationPage() {
           className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[70%]"
           style={{
             background: `radial-gradient(ellipse at center bottom,
-              rgba(232, 109, 72, ${isListening ? 0.15 : 0.08}) 0%,
-              rgba(196, 90, 58, ${isListening ? 0.08 : 0.04}) 30%,
+              rgba(232, 109, 72, ${isListening ? 0.15 : isSpeaking ? 0.12 : 0.08}) 0%,
+              rgba(196, 90, 58, ${isListening ? 0.08 : isSpeaking ? 0.06 : 0.04}) 30%,
               transparent 60%)`,
             transition: 'all 1s ease-out',
           }}
@@ -336,7 +512,7 @@ export default function ConversationPage() {
       )}
 
       {/* Minimal header */}
-      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening ? 'opacity-20' : 'opacity-100'}`}>
+      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening || isSpeaking ? 'opacity-20' : 'opacity-100'}`}>
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-lg font-serif text-[#f9f7f2]/50 hover:text-[#f9f7f2]/80 transition-colors">Embers</Link>
           <div className="flex items-center gap-4">
@@ -359,7 +535,7 @@ export default function ConversationPage() {
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${msg.role === 'user' ? 'bg-[#E86D48]/15 border border-[#E86D48]/20' : 'bg-white/5 border border-white/5'}`}>
-                    <p className="text-[15px] leading-relaxed font-serif text-[#f9f7f2]/90">{msg.content}</p>
+                    <p className="text-[15px] leading-relaxed font-serif text-[#f9f7f2]/90 whitespace-pre-line">{msg.content}</p>
                   </div>
                 </div>
               ))}
@@ -384,8 +560,8 @@ export default function ConversationPage() {
 
         {/* Fire area */}
         <div className={`relative flex flex-col items-center justify-end transition-all duration-700 ${messages.length === 0 ? 'h-[70vh]' : 'h-[40vh] min-h-[280px]'}`}>
-          {/* Welcome text with personalized prompt */}
-          {messages.length === 0 && !isListening && (
+          {/* Welcome text - only show before intro plays */}
+          {messages.length === 0 && !isPlayingIntro && !isSpeaking && (
             <div className="absolute top-12 left-0 right-0 text-center px-6">
               <h1 className="text-3xl md:text-4xl font-serif text-[#f9f7f2]/90 mb-4">
                 {userName ? (userContext.isReturningUser ? `Welcome back, ${userName}` : `Hello, ${userName}`) : 'Hello'}
@@ -395,7 +571,16 @@ export default function ConversationPage() {
               </p>
               {/* Tap to start hint */}
               <p className="text-sm text-[#f9f7f2]/20 mt-6">
-                Tap the fire to begin speaking
+                Tap the flame to begin
+              </p>
+            </div>
+          )}
+
+          {/* Speaking indicator when Ember is talking */}
+          {isSpeaking && messages.length <= 1 && (
+            <div className="absolute top-16 left-0 right-0 text-center px-6">
+              <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
+                Ember is speaking...
               </p>
             </div>
           )}
@@ -438,10 +623,10 @@ export default function ConversationPage() {
             placeholder="or type here..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            disabled={isProcessing}
+            disabled={isProcessing || isSpeaking}
             className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2]/90 placeholder:text-[#f9f7f2]/20 focus:outline-none focus:border-[#E86D48]/30 text-sm"
           />
-          <button type="submit" disabled={isProcessing || !inputText.trim()} className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30">
+          <button type="submit" disabled={isProcessing || isSpeaking || !inputText.trim()} className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30">
             Send
           </button>
         </form>
