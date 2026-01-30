@@ -7,6 +7,7 @@ import { SessionEnding } from '@/components/conversation/SessionEnding';
 import { SilenceProgressBar } from '@/components/conversation/SilenceProgressBar';
 import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
+import { useAudioRecorder } from '@/lib/speech/useAudioRecorder';
 import { Message } from '@/types';
 import { interestService } from '@/lib/services/interestService';
 import { userStyleService } from '@/lib/services/userStyleService';
@@ -22,6 +23,22 @@ const END_PHRASES = [
 function detectEndPhrase(text: string): boolean {
   const lowerText = text.toLowerCase();
   return END_PHRASES.some((phrase) => lowerText.includes(phrase));
+}
+
+// Warm, empathetic loading messages that rotate randomly
+const WARM_LOADING_MESSAGES = [
+  "Ember is listening...",
+  "Taking it all in...",
+  "Gathering my thoughts...",
+  "Reflecting on what you shared...",
+  "Just a moment...",
+  "Holding space for you...",
+  "With you shortly...",
+  "Savoring your words...",
+];
+
+function getRandomWarmMessage(): string {
+  return WARM_LOADING_MESSAGES[Math.floor(Math.random() * WARM_LOADING_MESSAGES.length)];
 }
 
 // Sensory-based opening questions - low emotional stakes, easy to answer
@@ -130,6 +147,8 @@ export default function ConversationPage() {
   const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [savedStoriesCount, setSavedStoriesCount] = useState(0);
+  const [warmLoadingMessage, setWarmLoadingMessage] = useState('');
+  const [useReliableRecording, setUseReliableRecording] = useState(true); // Use continuous recording by default
 
   // Voice introduction state
   const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
@@ -155,6 +174,7 @@ export default function ConversationPage() {
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
   const introPlayedRef = useRef(false);
+  const sendMessageRef = useRef<(content: string) => void>(() => {});
 
   // Load user data on mount
   useEffect(() => {
@@ -222,6 +242,31 @@ export default function ConversationPage() {
     isSupported, silenceStage, silenceDuration, silenceMessage,
     startListening, stopListening, resetTranscript,
   } = useSpeechRecognition({ onSilence: handleSilence, silenceTimeout: 5000 });
+
+  // Reliable audio recorder (continuous recording with Whisper transcription)
+  const handleTranscriptionComplete = useCallback((text: string) => {
+    if (text.trim()) {
+      if (detectEndPhrase(text)) setShowEndPrompt(true);
+      sendMessageRef.current(text);
+    }
+  }, []);
+
+  const {
+    isRecording,
+    isTranscribing,
+    formattedDuration,
+    error: recorderError,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useAudioRecorder({
+    onTranscriptionComplete: handleTranscriptionComplete,
+    onError: (err) => setError(err),
+  });
+
+  useEffect(() => {
+    if (recorderError) setError(recorderError);
+  }, [recorderError]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -377,9 +422,15 @@ export default function ConversationPage() {
     }
   };
 
+  // Keep ref updated for audio recorder callback
+  useEffect(() => {
+    sendMessageRef.current = handleSendMessage;
+  });
+
   const playAudio = async (text: string) => {
     try {
       setIsLoadingTTS(true);
+      setWarmLoadingMessage(getRandomWarmMessage());
       const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       if (!response.ok) throw new Error('TTS failed');
       const audioBlob = await response.blob();
@@ -388,29 +439,44 @@ export default function ConversationPage() {
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       setIsLoadingTTS(false);
+      setWarmLoadingMessage('');
       setIsSpeaking(true);
       audio.onended = () => {
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
-        if (shouldAutoResumeRef.current && isSupported) {
+        // Auto-start recording after Ember finishes speaking
+        if (shouldAutoResumeRef.current) {
           shouldAutoResumeRef.current = false;
-          setTimeout(() => startListening(), 500);
+          setTimeout(() => {
+            if (useReliableRecording) {
+              startRecording();
+            } else if (isSupported) {
+              startListening();
+            }
+          }, 600);
         }
       };
-      audio.onerror = () => { setIsSpeaking(false); setIsLoadingTTS(false); URL.revokeObjectURL(audioUrl); };
+      audio.onerror = () => { setIsSpeaking(false); setIsLoadingTTS(false); setWarmLoadingMessage(''); URL.revokeObjectURL(audioUrl); };
       await audio.play();
     } catch {
       setIsSpeaking(false);
       setIsLoadingTTS(false);
-      if (shouldAutoResumeRef.current && isSupported) {
+      setWarmLoadingMessage('');
+      if (shouldAutoResumeRef.current) {
         shouldAutoResumeRef.current = false;
-        setTimeout(() => startListening(), 500);
+        setTimeout(() => {
+          if (useReliableRecording) {
+            startRecording();
+          } else if (isSupported) {
+            startListening();
+          }
+        }, 600);
       }
     }
   };
 
   const handleFireClick = () => {
-    if (isSpeaking || isProcessing || isPlayingIntro || isLoadingTTS) return;
+    if (isSpeaking || isProcessing || isPlayingIntro || isLoadingTTS || isTranscribing) return;
 
     // If this is the first interaction and intro hasn't played, play it
     if (messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {
@@ -418,7 +484,17 @@ export default function ConversationPage() {
       return;
     }
 
-    // Otherwise, normal behavior
+    // Use reliable recording mode (continuous audio recording)
+    if (useReliableRecording) {
+      if (isRecording) {
+        stopRecording(); // Will transcribe and send automatically
+      } else {
+        startRecording();
+      }
+      return;
+    }
+
+    // Fallback: Web Speech API (less reliable on mobile)
     if (isListening) {
       stopListening();
       if (transcript) { handleSendMessage(transcript); resetTranscript(); }
@@ -559,7 +635,7 @@ export default function ConversationPage() {
       )}
 
       {/* Minimal header */}
-      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening || isSpeaking ? 'opacity-20' : 'opacity-100'}`}>
+      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening || isSpeaking || isRecording ? 'opacity-20' : 'opacity-100'}`}>
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-lg font-serif text-[#f9f7f2]/50 hover:text-[#f9f7f2]/80 transition-colors">Embers</Link>
           <div className="flex items-center gap-4">
@@ -593,11 +669,11 @@ export default function ConversationPage() {
                   </div>
                 </div>
               )}
-              {(isProcessing || isLoadingTTS) && (
+              {(isProcessing || isLoadingTTS || isTranscribing) && (
                 <div className="flex justify-start">
                   <div className="bg-white/5 border border-white/5 rounded-2xl px-5 py-3">
-                    <p className="text-[#f9f7f2]/40 font-serif text-sm">
-                      {isProcessing ? 'thinking...' : 'preparing voice...'}
+                    <p className="text-[#f9f7f2]/40 font-serif text-sm animate-pulse">
+                      {isProcessing ? 'Gathering my thoughts...' : isTranscribing ? 'Listening to your story...' : (warmLoadingMessage || 'Ember is listening...')}
                     </p>
                   </div>
                 </div>
@@ -629,7 +705,31 @@ export default function ConversationPage() {
           {(isSpeaking || isLoadingTTS) && messages.length <= 1 && (
             <div className="absolute top-16 left-0 right-0 text-center px-6">
               <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                {isLoadingTTS ? 'Preparing voice...' : 'Ember is speaking...'}
+                {isLoadingTTS ? (warmLoadingMessage || 'Ember is listening...') : 'Ember is speaking...'}
+              </p>
+            </div>
+          )}
+
+          {/* Recording indicator - prominent for elderly users */}
+          {isRecording && (
+            <div className="absolute top-16 left-0 right-0 text-center px-6">
+              <div className="inline-flex items-center gap-3 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-6 py-3">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                <p className="text-lg text-[#f9f7f2]/90 font-serif">
+                  Recording {formattedDuration}
+                </p>
+              </div>
+              <p className="text-sm text-[#f9f7f2]/40 mt-3 font-serif">
+                Tap the flame when you&apos;re finished
+              </p>
+            </div>
+          )}
+
+          {/* Transcribing indicator */}
+          {isTranscribing && (
+            <div className="absolute top-16 left-0 right-0 text-center px-6">
+              <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
+                Listening to your story...
               </p>
             </div>
           )}
@@ -637,9 +737,9 @@ export default function ConversationPage() {
           {/* The fire */}
           <div className="mb-8">
             <FlameButton
-              isListening={isListening}
+              isListening={isListening || isRecording}
               isSpeaking={isSpeaking}
-              isProcessing={isProcessing}
+              isProcessing={isProcessing || isTranscribing}
               isLoadingTTS={isLoadingTTS}
               onClick={handleFireClick}
               size={messages.length === 0 ? 'large' : 'medium'}
@@ -647,8 +747,8 @@ export default function ConversationPage() {
             />
           </div>
 
-          {/* Silence indicator */}
-          {isListening && hasActiveInput && silenceStage !== 'none' && (
+          {/* Silence indicator - only for Web Speech API mode */}
+          {!useReliableRecording && isListening && hasActiveInput && silenceStage !== 'none' && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
               <SilenceProgressBar stage={silenceStage} progress={silenceDuration} message={silenceMessage} isVisible={true} />
             </div>
@@ -673,14 +773,13 @@ export default function ConversationPage() {
             placeholder="or type here..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            disabled={isProcessing || isSpeaking}
+            disabled={isProcessing || isSpeaking || isRecording || isTranscribing}
             className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2]/90 placeholder:text-[#f9f7f2]/20 focus:outline-none focus:border-[#E86D48]/30 text-sm"
           />
-          <button type="submit" disabled={isProcessing || isSpeaking || !inputText.trim()} className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30">
+          <button type="submit" disabled={isProcessing || isSpeaking || isRecording || isTranscribing || !inputText.trim()} className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30">
             Send
           </button>
         </form>
-        {!isSupported && <p className="text-center text-red-400/60 text-xs mt-3">Voice not supported. Use Chrome, Edge, or Safari.</p>}
       </footer>
 
       <audio ref={audioRef} className="hidden" />
