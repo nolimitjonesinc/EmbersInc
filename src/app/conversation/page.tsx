@@ -148,7 +148,9 @@ export default function ConversationPage() {
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [savedStoriesCount, setSavedStoriesCount] = useState(0);
   const [warmLoadingMessage, setWarmLoadingMessage] = useState('');
-  const [useReliableRecording, setUseReliableRecording] = useState(true); // Use continuous recording by default
+  // Hybrid approach: Web Speech API is primary (free), Whisper is backup
+  // Will auto-switch to Whisper if Web Speech API isn't supported
+  const [useWhisperFallback, setUseWhisperFallback] = useState(false);
 
   // Voice introduction state
   const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
@@ -219,6 +221,14 @@ export default function ConversationPage() {
       } catch { /* ignore */ }
     };
     fetchStoriesCount();
+
+    // Check if Web Speech API is supported - if not, use Whisper fallback
+    const SpeechRecognition =
+      typeof window !== 'undefined' &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognition) {
+      setUseWhisperFallback(true);
+    }
   }, []);
 
   const resetInactivityTimer = useCallback(() => {
@@ -448,7 +458,7 @@ export default function ConversationPage() {
         if (shouldAutoResumeRef.current) {
           shouldAutoResumeRef.current = false;
           setTimeout(() => {
-            if (useReliableRecording) {
+            if (useWhisperFallback) {
               startRecording();
             } else if (isSupported) {
               startListening();
@@ -465,7 +475,7 @@ export default function ConversationPage() {
       if (shouldAutoResumeRef.current) {
         shouldAutoResumeRef.current = false;
         setTimeout(() => {
-          if (useReliableRecording) {
+          if (useWhisperFallback) {
             startRecording();
           } else if (isSupported) {
             startListening();
@@ -484,23 +494,23 @@ export default function ConversationPage() {
       return;
     }
 
-    // Use reliable recording mode (continuous audio recording)
-    if (useReliableRecording) {
-      if (isRecording) {
-        stopRecording(); // Will transcribe and send automatically
+    // Primary: Web Speech API (free, robust with auto-restart)
+    if (!useWhisperFallback) {
+      if (isListening) {
+        stopListening();
+        if (transcript) { handleSendMessage(transcript); resetTranscript(); }
       } else {
-        startRecording();
+        resetTranscript();
+        startListening();
       }
       return;
     }
 
-    // Fallback: Web Speech API (less reliable on mobile)
-    if (isListening) {
-      stopListening();
-      if (transcript) { handleSendMessage(transcript); resetTranscript(); }
+    // Fallback: Whisper transcription (when Web Speech API not supported)
+    if (isRecording) {
+      stopRecording(); // Will transcribe and send automatically
     } else {
-      resetTranscript();
-      startListening();
+      startRecording();
     }
   };
 
@@ -748,7 +758,7 @@ export default function ConversationPage() {
           </div>
 
           {/* Silence indicator - only for Web Speech API mode */}
-          {!useReliableRecording && isListening && hasActiveInput && silenceStage !== 'none' && (
+          {!useWhisperFallback && isListening && hasActiveInput && silenceStage !== 'none' && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
               <SilenceProgressBar stage={silenceStage} progress={silenceDuration} message={silenceMessage} isVisible={true} />
             </div>
