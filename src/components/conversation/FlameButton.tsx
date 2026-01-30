@@ -6,6 +6,7 @@ interface FlameButtonProps {
   isListening?: boolean;
   isSpeaking?: boolean;
   isProcessing?: boolean;
+  isLoadingTTS?: boolean;
   onClick?: () => void;
   size?: 'small' | 'medium' | 'large';
   showEmberCount?: number;
@@ -25,6 +26,7 @@ export function FlameButton({
   isListening = false,
   isSpeaking = false,
   isProcessing = false,
+  isLoadingTTS = false,
   onClick,
   size = 'large',
   showEmberCount = 0,
@@ -80,9 +82,10 @@ export function FlameButton({
 
   const config = sizeConfig[size];
 
-  // Visual states: listening = brighter/taller, speaking = calm/focused, processing = subdued
-  const intensity = isListening ? 1.25 : isSpeaking ? 1.0 : isProcessing ? 0.6 : 1;
+  // Visual states: listening = brighter/taller, speaking = calm/focused, processing/loadingTTS = subdued
+  const intensity = isListening ? 1.25 : isSpeaking ? 1.0 : (isProcessing || isLoadingTTS) ? 0.7 : 1;
   const speakingMode = isSpeaking && !isListening;
+  const loadingMode = isLoadingTTS && !isSpeaking;
 
   return (
     <div
@@ -423,6 +426,20 @@ export function FlameButton({
         </>
       )}
 
+      {/* Loading TTS mode - gentle pulsing glow */}
+      {loadingMode && (
+        <div
+          className="absolute bottom-[25%] left-1/2 rounded-full pointer-events-none"
+          style={{
+            width: 120 * config.scale,
+            height: 120 * config.scale,
+            background: 'radial-gradient(ellipse at center, rgba(255, 200, 130, 0.2) 0%, transparent 60%)',
+            transform: 'translateX(-50%)',
+            animation: 'loadingPulse 1.5s ease-in-out infinite',
+          }}
+        />
+      )}
+
       {/* Story ember count */}
       {showEmberCount > 0 && (
         <div className="absolute bottom-[4%] left-1/2 -translate-x-1/2 flex gap-2">
@@ -444,7 +461,7 @@ export function FlameButton({
       )}
 
       {/* Tap hint */}
-      {!isListening && !isSpeaking && !isProcessing && (
+      {!isListening && !isSpeaking && !isProcessing && !isLoadingTTS && (
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap">
           <p className="text-[#f9f7f2]/25 text-sm font-serif opacity-0 group-hover:opacity-100 transition-opacity duration-700">
             tap to begin
@@ -547,6 +564,11 @@ export function FlameButton({
         @keyframes storyEmberGlow {
           0%, 100% { opacity: 0.5; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.25); }
+        }
+
+        @keyframes loadingPulse {
+          0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.3; }
+          50% { transform: translateX(-50%) scale(1.3); opacity: 0.6; }
         }
       `}</style>
     </div>

@@ -119,6 +119,7 @@ export default function ConversationPage() {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoadingTTS, setIsLoadingTTS] = useState(false);
   const [userName, setUserName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -378,7 +379,7 @@ export default function ConversationPage() {
 
   const playAudio = async (text: string) => {
     try {
-      setIsSpeaking(true);
+      setIsLoadingTTS(true);
       const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       if (!response.ok) throw new Error('TTS failed');
       const audioBlob = await response.blob();
@@ -386,6 +387,8 @@ export default function ConversationPage() {
       if (audioRef.current) audioRef.current.pause();
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
+      setIsLoadingTTS(false);
+      setIsSpeaking(true);
       audio.onended = () => {
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
@@ -394,10 +397,11 @@ export default function ConversationPage() {
           setTimeout(() => startListening(), 500);
         }
       };
-      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(audioUrl); };
+      audio.onerror = () => { setIsSpeaking(false); setIsLoadingTTS(false); URL.revokeObjectURL(audioUrl); };
       await audio.play();
     } catch {
       setIsSpeaking(false);
+      setIsLoadingTTS(false);
       if (shouldAutoResumeRef.current && isSupported) {
         shouldAutoResumeRef.current = false;
         setTimeout(() => startListening(), 500);
@@ -406,7 +410,7 @@ export default function ConversationPage() {
   };
 
   const handleFireClick = () => {
-    if (isSpeaking || isProcessing || isPlayingIntro) return;
+    if (isSpeaking || isProcessing || isPlayingIntro || isLoadingTTS) return;
 
     // If this is the first interaction and intro hasn't played, play it
     if (messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {
@@ -589,10 +593,12 @@ export default function ConversationPage() {
                   </div>
                 </div>
               )}
-              {isProcessing && (
+              {(isProcessing || isLoadingTTS) && (
                 <div className="flex justify-start">
                   <div className="bg-white/5 border border-white/5 rounded-2xl px-5 py-3">
-                    <p className="text-[#f9f7f2]/40 font-serif text-sm">thinking...</p>
+                    <p className="text-[#f9f7f2]/40 font-serif text-sm">
+                      {isProcessing ? 'thinking...' : 'preparing voice...'}
+                    </p>
                   </div>
                 </div>
               )}
@@ -619,11 +625,11 @@ export default function ConversationPage() {
             </div>
           )}
 
-          {/* Speaking indicator when Ember is talking */}
-          {isSpeaking && messages.length <= 1 && (
+          {/* Speaking/Loading indicator when Ember is talking or preparing to speak */}
+          {(isSpeaking || isLoadingTTS) && messages.length <= 1 && (
             <div className="absolute top-16 left-0 right-0 text-center px-6">
               <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                Ember is speaking...
+                {isLoadingTTS ? 'Preparing voice...' : 'Ember is speaking...'}
               </p>
             </div>
           )}
@@ -634,6 +640,7 @@ export default function ConversationPage() {
               isListening={isListening}
               isSpeaking={isSpeaking}
               isProcessing={isProcessing}
+              isLoadingTTS={isLoadingTTS}
               onClick={handleFireClick}
               size={messages.length === 0 ? 'large' : 'medium'}
               showEmberCount={savedStoriesCount}
