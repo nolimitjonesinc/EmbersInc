@@ -140,14 +140,28 @@ export default function OnboardingPage() {
       })
 
       if (error) {
-        setEmailError(error.message)
+        // Show specific error messages for common issues
+        if (error.message.includes('rate limit') || error.message.includes('rate_limit')) {
+          setEmailError('Too many requests. Please wait a few minutes and try again.')
+        } else if (error.message.includes('Invalid email')) {
+          setEmailError('Please enter a valid email address.')
+        } else {
+          setEmailError(error.message)
+        }
       } else {
         setEmailSent(true)
         setStep('email-sent')
         setTimeout(() => playVoice(VOICE_SCRIPTS.emailSent), 500)
       }
-    } catch {
-      setEmailError('Something went wrong. Please try again.')
+    } catch (err) {
+      // Log the actual error for debugging
+      console.error('Magic link error:', err)
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      if (message.includes('Missing Supabase')) {
+        setEmailError('Email service not configured. Please skip for now.')
+      } else {
+        setEmailError(`Something went wrong: ${message}`)
+      }
     } finally {
       setIsSendingEmail(false)
     }
