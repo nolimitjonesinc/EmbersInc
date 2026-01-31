@@ -12,12 +12,14 @@ import { FlameButton } from '@/components/conversation/FlameButton'
 
 type OnboardingStep = 'welcome' | 'interests' | 'name' | 'safekeeping' | 'email-sent' | 'ready'
 
-// Voice scripts for each step
+// Voice scripts for each step - warm, empathetic, with clear directional guidance
 const VOICE_SCRIPTS = {
-  welcome: `Hello. I'm Ember. I'm here to help you preserve the stories and memories that matter most to you. There's no pressure, no right or wrong way to do this. Just your voice, your memories, and all the time you need. Let me show you how this works.`,
-  safekeeping: `The memories you're about to share are precious. Before we begin, I'd like to make sure they're kept safe. Your email is simply your key back to everything we create together. Nothing else needed.`,
-  emailSent: `I just sent you a magic link. Check your email and click the link to continue. I'll be right here waiting.`,
-  ready: `You're all set. Remember, there's no rush. Just speak naturally, and I'll guide you along the way. Whenever you're ready, let's begin.`
+  welcome: `Hello. I'm Ember. I'm here to help you preserve the stories and memories that matter most to you. There's no pressure, no right or wrong way to do this. Just your voice, your memories, and all the time you need. When you're ready, tap the orange button that says "Let's Get Started."`,
+  interests: `I'd love to know what kinds of stories interest you most. You'll see topics like family, career, travel, and more. Tap any that speak to you - you can choose as many as you'd like. When you're done, tap the "Continue" button at the bottom of the screen.`,
+  name: `What should I call you? There's a text box on your screen. Just type your first name, then tap the "Continue" button.`,
+  safekeeping: `The memories you're about to share are precious. I'd like to help keep them safe. Your email is simply your key back to everything we create together. Type your email address, then tap "Send My Key." Or if you prefer, you can tap "Skip for now" at the bottom.`,
+  emailSent: `I just sent you a magic link. Check your email and click the link to continue. You can also tap "Continue without waiting" if you'd like to start right away. I'll be right here.`,
+  ready: `You're all set. Remember, there's no rush. Just speak naturally, and I'll guide you along the way. When you're ready, tap the orange button that says "Start My First Story."`
 }
 
 export default function OnboardingPage() {
@@ -47,6 +49,30 @@ export default function OnboardingPage() {
       setSelectedInterests(new Set(storedInterests))
     }
   }, [])
+
+  // Auto-play voice when step changes - voice starts immediately
+  useEffect(() => {
+    // Small delay to let the UI render, then play voice
+    const timer = setTimeout(() => {
+      switch (step) {
+        case 'welcome':
+          if (!hasPlayedWelcome) {
+            setHasPlayedWelcome(true)
+            playVoice(VOICE_SCRIPTS.welcome)
+          }
+          break
+        case 'interests':
+          playVoice(VOICE_SCRIPTS.interests)
+          break
+        case 'name':
+          playVoice(VOICE_SCRIPTS.name)
+          break
+        // safekeeping, email-sent, and ready already have voice triggers
+      }
+    }, 300) // Short delay for UI to settle
+
+    return () => clearTimeout(timer)
+  }, [step, hasPlayedWelcome])
 
   // Play voice for current step
   const playVoice = async (text: string) => {
@@ -84,14 +110,6 @@ export default function OnboardingPage() {
       await audio.play()
     } catch {
       setIsPlayingVoice(false)
-    }
-  }
-
-  // Auto-play welcome voice on first visit
-  const handleStartWelcome = () => {
-    if (!hasPlayedWelcome) {
-      setHasPlayedWelcome(true)
-      playVoice(VOICE_SCRIPTS.welcome)
     }
   }
 
@@ -199,7 +217,7 @@ export default function OnboardingPage() {
 
       <div className="relative z-10 flex-1 flex flex-col max-w-2xl mx-auto w-full px-6 py-8">
         <AnimatePresence mode="wait">
-          {/* Welcome Step - Now with Voice */}
+          {/* Welcome Step - Voice auto-plays immediately */}
           {step === 'welcome' && (
             <motion.div
               key="welcome"
@@ -214,7 +232,7 @@ export default function OnboardingPage() {
                   isListening={false}
                   isSpeaking={isPlayingVoice}
                   isProcessing={false}
-                  onClick={handleStartWelcome}
+                  onClick={() => {}}
                   size="large"
                 />
               </div>
@@ -230,62 +248,53 @@ export default function OnboardingPage() {
                 </motion.p>
               )}
 
-              {/* Content - shows after or during voice */}
+              {/* Content - visible immediately, voice explains it */}
               <motion.div
                 className="space-y-4"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: hasPlayedWelcome ? 1 : 0.3 }}
-                transition={{ delay: 0.5 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
               >
                 <h1 className="text-4xl font-serif font-bold text-[#f9f7f2]">
-                  Welcome to Embers
+                  Hello, I&apos;m Ember
                 </h1>
                 <p className="text-xl text-[#f9f7f2]/60 leading-relaxed max-w-md">
-                  Your stories matter. Let&apos;s preserve them for your family, together.
+                  I&apos;m here to help you preserve your stories and memories.
                 </p>
               </motion.div>
 
-              {!hasPlayedWelcome ? (
+              {/* How it works - shown while voice plays */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="space-y-4 w-full max-w-sm"
+              >
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-4">
+                  <h2 className="text-lg font-semibold text-[#f9f7f2]">Here&apos;s how it works:</h2>
+                  <ul className="space-y-3">
+                    {[
+                      { icon: '🎙️', text: 'You talk, just like chatting with a friend' },
+                      { icon: '💬', text: 'I ask questions to help you remember more' },
+                      { icon: '📖', text: 'Your stories become a beautiful Life Book' },
+                    ].map((item, i) => (
+                      <li key={i} className="flex items-center gap-3">
+                        <span className="text-2xl">{item.icon}</span>
+                        <span className="text-[#f9f7f2]/80">{item.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
                 <button
-                  onClick={handleStartWelcome}
-                  className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg"
+                  onClick={() => setStep('interests')}
+                  disabled={isPlayingVoice}
+                  className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
                 >
-                  Tap to Begin
+                  Let&apos;s Get Started
                 </button>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 2 }}
-                  className="space-y-4 w-full max-w-sm"
-                >
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-4">
-                    <h2 className="text-lg font-semibold text-[#f9f7f2]">Here&apos;s how it works:</h2>
-                    <ul className="space-y-3">
-                      {[
-                        { icon: '🎙️', text: 'You talk, just like chatting with a friend' },
-                        { icon: '💬', text: 'I ask questions to help you remember more' },
-                        { icon: '📖', text: 'Your stories become a beautiful Life Book' },
-                      ].map((item, i) => (
-                        <li key={i} className="flex items-center gap-3">
-                          <span className="text-2xl">{item.icon}</span>
-                          <span className="text-[#f9f7f2]/80">{item.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <button
-                    onClick={() => setStep('interests')}
-                    disabled={isPlayingVoice}
-                    className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-                  >
-                    Let&apos;s Get Started
-                  </button>
-                </motion.div>
-              )}
+              </motion.div>
 
               <Link
                 href="/"
@@ -305,12 +314,25 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col"
             >
+              {/* Speaking indicator at top */}
+              {isPlayingVoice && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center mb-4"
+                >
+                  <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
+                    Ember is speaking...
+                  </p>
+                </motion.div>
+              )}
+
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-serif font-bold text-[#f9f7f2] mb-3">
                   What stories call to you?
                 </h1>
                 <p className="text-[#f9f7f2]/60">
-                  Select the topics you&apos;d like to explore. Pick as many as you&apos;d like.
+                  Tap any topics that speak to you.
                 </p>
               </div>
 
@@ -363,13 +385,24 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, y: -20 }}
               className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
             >
+              {/* Speaking indicator */}
+              {isPlayingVoice && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
+                >
+                  Ember is speaking...
+                </motion.p>
+              )}
+
               <div className="space-y-4">
                 <span className="text-6xl">👋</span>
                 <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
                   What should I call you?
                 </h1>
                 <p className="text-xl text-[#f9f7f2]/60 max-w-md">
-                  I&apos;d love to know your name so we can have a more personal conversation.
+                  Type your first name below.
                 </p>
               </div>
 
