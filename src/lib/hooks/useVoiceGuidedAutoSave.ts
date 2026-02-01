@@ -33,6 +33,7 @@ interface UseVoiceGuidedAutoSaveOptions {
   onAutoSave: () => Promise<void>;
   onSilencePrompt?: (prompt: SilencePrompt) => void;
   enabled?: boolean;
+  enableSupabaseDrafts?: boolean; // Enable server-side draft saving
 }
 
 // Silence thresholds in milliseconds
@@ -100,7 +101,7 @@ export function useVoiceGuidedAutoSave(
   messages: Message[],
   options: UseVoiceGuidedAutoSaveOptions
 ) {
-  const { onPlayVoice, onAutoSave, onSilencePrompt, enabled = true } = options;
+  const { onPlayVoice, onAutoSave, onSilencePrompt, enabled = true, enableSupabaseDrafts = true } = options;
 
   // Silence tracking
   const [silenceStage, setSilenceStage] = useState<'none' | 'gentle' | 'save-offer' | 'auto-saved'>('none');
@@ -143,6 +144,52 @@ export function useVoiceGuidedAutoSave(
     }));
   }, [messages]);
 
+  // Save draft to Supabase (server-side persistence)
+  const saveDraftToSupabase = useCallback(async () => {
+    if (messages.length < 2 || !enableSupabaseDrafts) return;
+
+    try {
+      await fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages }),
+      });
+    } catch (err) {
+      console.error('Failed to save draft to Supabase:', err);
+    }
+  }, [messages, enableSupabaseDrafts]);
+
+  // Load draft from Supabase
+  const loadDraftFromSupabase = useCallback(async (): Promise<{ messages: Message[]; savedAt: Date } | null> => {
+    if (!enableSupabaseDrafts) return null;
+
+    try {
+      const response = await fetch('/api/drafts');
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      if (!data.draft) return null;
+
+      return {
+        messages: data.draft.messages,
+        savedAt: new Date(data.draft.updated_at),
+      };
+    } catch {
+      return null;
+    }
+  }, [enableSupabaseDrafts]);
+
+  // Clear draft from Supabase
+  const clearDraftFromSupabase = useCallback(async () => {
+    if (!enableSupabaseDrafts) return;
+
+    try {
+      await fetch('/api/drafts', { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to clear draft from Supabase:', err);
+    }
+  }, [enableSupabaseDrafts]);
+
   // Load draft from localStorage
   const loadDraft = useCallback((): { messages: Message[]; savedAt: Date } | null => {
     try {
@@ -159,7 +206,7 @@ export function useVoiceGuidedAutoSave(
     }
   }, []);
 
-  // Clear draft from localStorage
+  // Clear draft from localStorage and Supabase
   const clearDraft = useCallback(() => {
     localStorage.removeItem('embers_conversation_draft');
     setAutoSaveState({
@@ -167,7 +214,9 @@ export function useVoiceGuidedAutoSave(
       lastSavedAt: null,
       draftId: null,
     });
-  }, []);
+    // Also clear from Supabase
+    clearDraftFromSupabase();
+  }, [clearDraftFromSupabase]);
 
   // Reset silence tracking (called when user speaks or interacts)
   const resetSilence = useCallback(() => {
@@ -235,12 +284,13 @@ export function useVoiceGuidedAutoSave(
   useEffect(() => {
     if (!enabled || messages.length < 2) return;
 
-    // Save immediately when messages change
+    // Save immediately when messages change (localStorage only - fast)
     saveDraftToLocalStorage();
 
-    // Set up interval for periodic saves
+    // Set up interval for periodic saves (includes Supabase - slower, debounced)
     draftTimerRef.current = setInterval(() => {
       saveDraftToLocalStorage();
+      saveDraftToSupabase(); // Also save to server
     }, AUTO_DRAFT_INTERVAL);
 
     return () => {
@@ -248,7 +298,7 @@ export function useVoiceGuidedAutoSave(
         clearInterval(draftTimerRef.current);
       }
     };
-  }, [enabled, messages, saveDraftToLocalStorage]);
+  }, [enabled, messages, saveDraftToLocalStorage, saveDraftToSupabase]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -273,7 +323,9 @@ export function useVoiceGuidedAutoSave(
     startSilenceTracking,
     stopSilenceTracking,
     saveDraftToLocalStorage,
+    saveDraftToSupabase,
     loadDraft,
+    loadDraftFromSupabase,
     clearDraft,
 
     // Utility
