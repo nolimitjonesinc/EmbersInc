@@ -9,6 +9,7 @@ import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { useAudioRecorder } from '@/lib/speech/useAudioRecorder';
 import { useContinuousRecorder } from '@/lib/speech/useContinuousRecorder';
+import { useVoiceGuidedAutoSave, detectVoiceCommand } from '@/lib/hooks/useVoiceGuidedAutoSave';
 import { Message } from '@/types';
 import { interestService } from '@/lib/services/interestService';
 import { userStyleService } from '@/lib/services/userStyleService';
@@ -179,6 +180,10 @@ export default function ConversationPage() {
   const introPlayedRef = useRef(false);
   const sendMessageRef = useRef<(content: string) => void>(() => {});
 
+  // State for draft recovery prompt
+  const [showDraftRecovery, setShowDraftRecovery] = useState(false);
+  const [recoveredDraft, setRecoveredDraft] = useState<{ messages: Message[]; savedAt: Date } | null>(null);
+
   // Load user data on mount
   useEffect(() => {
     // Check if intro was already played this session
@@ -230,6 +235,21 @@ export default function ConversationPage() {
     if (!SpeechRecognition) {
       setUseWhisperFallback(true);
     }
+
+    // Check for recovered draft (inline to avoid dependency issues)
+    try {
+      const draftStr = localStorage.getItem('embers_conversation_draft');
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft.messages && draft.messages.length >= 2) {
+          setRecoveredDraft({
+            messages: draft.messages,
+            savedAt: new Date(draft.savedAt),
+          });
+          setShowDraftRecovery(true);
+        }
+      }
+    } catch { /* ignore invalid drafts */ }
   }, []);
 
   const resetInactivityTimer = useCallback(() => {
@@ -240,19 +260,42 @@ export default function ConversationPage() {
     }, INACTIVITY_TIMEOUT);
   }, [messages.length]);
 
+  // Refs for silence callback (to avoid stale closures)
+  const transcriptRef = useRef('');
+  const messagesLengthRef = useRef(0);
+
   const handleSilence = useCallback(() => {
-    if (transcript && !isProcessing) {
-      if (detectEndPhrase(transcript)) setShowEndPrompt(true);
-      handleSendMessage(transcript);
-      resetTranscript();
+    const currentTranscript = transcriptRef.current;
+    if (currentTranscript && !isProcessing) {
+      // Check for voice commands first
+      const voiceCommand = detectVoiceCommand(currentTranscript);
+      if (voiceCommand === 'save' || voiceCommand === 'done' || voiceCommand === 'goodbye') {
+        // Don't send as message, handle as command
+        if (messagesLengthRef.current >= 2) {
+          setShowEndPrompt(true);
+        }
+        return;
+      }
+
+      if (detectEndPhrase(currentTranscript)) setShowEndPrompt(true);
+      sendMessageRef.current(currentTranscript);
     }
-  }, []);
+  }, [isProcessing]);
 
   const {
     isListening, transcript, interimTranscript, error: speechError,
     isSupported, silenceStage, silenceDuration, silenceMessage,
     startListening, stopListening, resetTranscript,
   } = useSpeechRecognition({ onSilence: handleSilence, silenceTimeout: 5000 });
+
+  // Keep refs in sync for the silence callback
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+
+  useEffect(() => {
+    messagesLengthRef.current = messages.length;
+  }, [messages.length]);
 
   // Reliable audio recorder (continuous recording with Whisper transcription)
   const handleTranscriptionComplete = useCallback((text: string) => {
@@ -290,6 +333,88 @@ export default function ConversationPage() {
 
   // Start session recording when conversation begins
   const sessionRecordingStartedRef = useRef(false);
+
+  // Play voice prompt (for silence detection callbacks)
+  const playVoicePrompt = useCallback(async (text: string) => {
+    // Don't interrupt if already speaking or processing
+    if (isSpeaking || isProcessing) return;
+
+    try {
+      setIsSpeaking(true);
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) throw new Error('TTS failed');
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      if (audioRef.current) audioRef.current.pause();
+
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      // Add as assistant message so user sees what Ember said
+      const promptMessage: Message = {
+        id: 'prompt-' + Date.now(),
+        role: 'assistant',
+        content: text,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, promptMessage]);
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        // Resume listening after prompt
+        if (isSupported && !useWhisperFallback) {
+          setTimeout(() => startListening(), 600);
+        }
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      await audio.play();
+    } catch {
+      setIsSpeaking(false);
+    }
+  }, [isSpeaking, isProcessing, isSupported, useWhisperFallback, startListening]);
+
+  // Handle auto-save from silence detection
+  const handleAutoSave = useCallback(async () => {
+    if (messages.length < 2) return;
+
+    // Save draft to localStorage (Supabase save happens in handleSaveStory)
+    const draft = {
+      id: `draft-${Date.now()}`,
+      messages,
+      savedAt: new Date().toISOString(),
+      userName: localStorage.getItem('embers_user_name') || '',
+    };
+    localStorage.setItem('embers_conversation_draft', JSON.stringify(draft));
+  }, [messages]);
+
+  // Voice-guided auto-save hook
+  const {
+    silenceStage: voiceSilenceStage,
+    silenceDuration: voiceSilenceDuration,
+    autoSaveState,
+    resetSilence,
+    startSilenceTracking,
+    stopSilenceTracking,
+    loadDraft,
+    clearDraft,
+  } = useVoiceGuidedAutoSave(messages, {
+    onPlayVoice: playVoicePrompt,
+    onAutoSave: handleAutoSave,
+    enabled: messages.length >= 2 && !isSpeaking && !isProcessing,
+  });
 
   useEffect(() => {
     if (recorderError) setError(recorderError);
@@ -480,6 +605,8 @@ export default function ConversationPage() {
             } else if (isSupported) {
               startListening();
             }
+            // Start silence tracking - user might not respond
+            startSilenceTracking();
           }, 600);
         }
       };
@@ -510,6 +637,10 @@ export default function ConversationPage() {
       playVoiceIntroduction();
       return;
     }
+
+    // Reset silence tracking when user starts interacting
+    resetSilence();
+    stopSilenceTracking();
 
     // Primary: Web Speech API (free, robust with auto-restart)
     if (!useWhisperFallback) {
@@ -552,6 +683,7 @@ export default function ConversationPage() {
     setShowEndPrompt(false);
     setShowInactivityPrompt(false);
     stopListening();
+    stopSilenceTracking();
     if (audioRef.current) audioRef.current.pause();
 
     try {
@@ -602,6 +734,7 @@ export default function ConversationPage() {
       setSavedStoryId(storyId);
       setSavedStoryTitle(data.story.title || null);
       setSavedStoriesCount(prev => prev + 1);
+      clearDraft(); // Clear draft after successful save
 
       // Generate summary of what was shared
       const summary = generateConversationSummary(messages);
@@ -628,6 +761,9 @@ export default function ConversationPage() {
     setHasPlayedIntro(false);
     introPlayedRef.current = false;
     sessionStorage.removeItem('embers_intro_played');
+    clearDraft(); // Clear any saved draft
+    stopSilenceTracking();
+    resetSilence();
 
     // Generate a new starter prompt
     const interests = interestService.get();
@@ -640,6 +776,24 @@ export default function ConversationPage() {
       prompt = getRandomWarmPrompt().question;
     }
     setStarterPrompt(prompt);
+  };
+
+  // Handle recovering a draft
+  const handleRecoverDraft = () => {
+    if (recoveredDraft) {
+      setMessages(recoveredDraft.messages);
+      setHasPlayedIntro(true);
+      introPlayedRef.current = true;
+      sessionStorage.setItem('embers_intro_played', 'true');
+    }
+    setShowDraftRecovery(false);
+  };
+
+  // Handle discarding a draft
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setShowDraftRecovery(false);
+    setRecoveredDraft(null);
   };
 
   if (showSessionEnding) {
@@ -677,6 +831,37 @@ export default function ConversationPage() {
 
       {/* Inactivity prompt */}
       <InactivityPrompt isVisible={showInactivityPrompt} onContinue={() => { setShowInactivityPrompt(false); resetInactivityTimer(); }} onSaveAndExit={handleSaveStory} />
+
+      {/* Draft recovery prompt */}
+      {showDraftRecovery && recoveredDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-[#0a0908]/90 backdrop-blur-sm" />
+          <div className="relative bg-[#151312] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center">
+            <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Welcome back</h3>
+            <p className="text-sm text-[#f9f7f2]/50 mb-2">
+              You have an unsaved conversation from earlier.
+            </p>
+            <p className="text-xs text-[#f9f7f2]/30 mb-4">
+              Saved {new Date(recoveredDraft.savedAt).toLocaleString()}
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleDiscardDraft}
+                className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm"
+              >
+                Start Fresh
+              </button>
+              <button
+                onClick={handleRecoverDraft}
+                className="flex-1 py-3 rounded-full text-white text-sm"
+                style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* End prompt */}
       {showEndPrompt && messages.length >= 2 && (
