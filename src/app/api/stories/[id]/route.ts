@@ -35,7 +35,7 @@ export async function GET(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .select('*')
       .eq('id', id)
       .single()
@@ -54,7 +54,7 @@ export async function GET(
       // Check if user has family access to this story
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: familyAccess } = await (supabase as any)
-        .from('family_members')
+        .from('embers_family_members')
         .select('family_group_id')
         .eq('user_id', user.id)
         .eq('status', 'active')
@@ -100,7 +100,7 @@ export async function PUT(
     // First verify ownership
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingData, error: fetchError } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .select('user_id')
       .eq('id', id)
       .single()
@@ -136,7 +136,7 @@ export async function PUT(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: story, error } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -181,7 +181,7 @@ export async function DELETE(
     // First verify ownership
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingData2, error: fetchError } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .select('user_id')
       .eq('id', id)
       .single()
@@ -204,7 +204,7 @@ export async function DELETE(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .delete()
       .eq('id', id)
 

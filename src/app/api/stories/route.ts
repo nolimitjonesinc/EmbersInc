@@ -14,6 +14,8 @@ interface CreateStoryRequest {
   chapter?: string
   generateNarrative?: boolean
   generateTitle?: boolean
+  rawTranscript?: string
+  conversationMessages?: Message[]
 }
 
 // GET /api/stories - List user's stories
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query = (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -88,7 +90,9 @@ export async function POST(request: NextRequest) {
       title: providedTitle,
       chapter: providedChapter,
       generateNarrative = true,
-      generateTitle = true
+      generateTitle = true,
+      rawTranscript,
+      conversationMessages,
     } = body
 
     if (!content || content.trim().length === 0) {
@@ -128,8 +132,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the story
-    const storyData: StoryInsert = {
+    // Create the story with all data for book generation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const storyData: any = {
       user_id: user.id,
       title,
       content,
@@ -138,11 +143,13 @@ export async function POST(request: NextRequest) {
       tags,
       sentiment_score: sentimentScore,
       is_published: false,
+      raw_transcript: rawTranscript || content,
+      conversation_messages: conversationMessages || messages || [],
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: story, error } = await (supabase as any)
-      .from('stories')
+      .from('embers_stories')
       .insert(storyData)
       .select()
       .single()

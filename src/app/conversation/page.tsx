@@ -8,6 +8,7 @@ import { SilenceProgressBar } from '@/components/conversation/SilenceProgressBar
 import { InactivityPrompt } from '@/components/conversation/InactivityPrompt';
 import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { useAudioRecorder } from '@/lib/speech/useAudioRecorder';
+import { useContinuousRecorder } from '@/lib/speech/useContinuousRecorder';
 import { Message } from '@/types';
 import { interestService } from '@/lib/services/interestService';
 import { userStyleService } from '@/lib/services/userStyleService';
@@ -274,6 +275,22 @@ export default function ConversationPage() {
     onError: (err) => setError(err),
   });
 
+  // Continuous session recorder - records entire conversation for archival
+  const {
+    isRecording: isSessionRecording,
+    duration: sessionDuration,
+    formattedDuration: sessionFormattedDuration,
+    startRecording: startSessionRecording,
+    stopRecording: stopSessionRecording,
+    pauseRecording: pauseSessionRecording,
+    resumeRecording: resumeSessionRecording,
+  } = useContinuousRecorder({
+    onError: (err) => console.error('Session recording error:', err),
+  });
+
+  // Start session recording when conversation begins
+  const sessionRecordingStartedRef = useRef(false);
+
   useEffect(() => {
     if (recorderError) setError(recorderError);
   }, [recorderError]);
@@ -538,15 +555,51 @@ export default function ConversationPage() {
     if (audioRef.current) audioRef.current.pause();
 
     try {
-      const content = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
+      // Get raw transcript (all user messages combined)
+      const rawTranscript = messages
+        .filter(m => m.role === 'user')
+        .map(m => m.content)
+        .join('\n\n');
+
+      // Save the story with conversation messages
       const response = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, messages, generateNarrative: true, generateTitle: true }),
+        body: JSON.stringify({
+          content: rawTranscript,
+          messages,
+          generateNarrative: true,
+          generateTitle: true,
+          rawTranscript,
+          conversationMessages: messages,
+        }),
       });
       if (!response.ok) throw new Error('Failed to save');
       const data = await response.json();
-      setSavedStoryId(data.story.id);
+      const storyId = data.story.id;
+
+      // Stop session recording and upload audio
+      if (isSessionRecording) {
+        try {
+          const audioBlob = await stopSessionRecording();
+          if (audioBlob && audioBlob.size > 0) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'conversation.webm');
+            formData.append('storyId', storyId);
+            formData.append('duration', sessionDuration.toString());
+
+            await fetch('/api/audio/upload', {
+              method: 'POST',
+              body: formData,
+            });
+          }
+        } catch (audioErr) {
+          console.error('Failed to upload audio:', audioErr);
+          // Don't fail the whole save if audio upload fails
+        }
+      }
+
+      setSavedStoryId(storyId);
       setSavedStoryTitle(data.story.title || null);
       setSavedStoriesCount(prev => prev + 1);
 
