@@ -10,6 +10,7 @@ import { useSpeechRecognition } from '@/lib/speech/useSpeechRecognition';
 import { useAudioRecorder } from '@/lib/speech/useAudioRecorder';
 import { useContinuousRecorder } from '@/lib/speech/useContinuousRecorder';
 import { useVoiceGuidedAutoSave, detectVoiceCommand } from '@/lib/hooks/useVoiceGuidedAutoSave';
+import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands';
 import { Message } from '@/types';
 import { interestService } from '@/lib/services/interestService';
 import { userStyleService } from '@/lib/services/userStyleService';
@@ -183,6 +184,9 @@ export default function ConversationPage() {
   // State for draft recovery prompt
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
   const [recoveredDraft, setRecoveredDraft] = useState<{ messages: Message[]; savedAt: Date } | null>(null);
+  const [hasPlayedDraftRecoveryVoice, setHasPlayedDraftRecoveryVoice] = useState(false);
+  const [isPlayingDraftRecoveryVoice, setIsPlayingDraftRecoveryVoice] = useState(false);
+  const draftRecoveryAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load user data on mount
   useEffect(() => {
@@ -287,6 +291,20 @@ export default function ConversationPage() {
     isSupported, silenceStage, silenceDuration, silenceMessage,
     startListening, stopListening, resetTranscript,
   } = useSpeechRecognition({ onSilence: handleSilence, silenceTimeout: 5000 });
+
+  // Voice commands for draft recovery modal
+  const {
+    isListening: isDraftRecoveryListening,
+    transcript: draftRecoveryTranscript,
+    isSupported: isDraftRecoverySupported,
+    startListening: startDraftRecoveryListening,
+    stopListening: stopDraftRecoveryListening,
+    resetTranscript: resetDraftRecoveryTranscript,
+    isAffirmative,
+  } = useVoiceCommands({
+    continuous: false,
+    enabled: showDraftRecovery && !isPlayingDraftRecoveryVoice,
+  });
 
   // Keep refs in sync for the silence callback
   useEffect(() => {
@@ -448,6 +466,66 @@ export default function ConversationPage() {
       }
     }
   }, [messages]);
+
+  // Play voice prompt for draft recovery
+  const playDraftRecoveryVoice = useCallback(async () => {
+    if (hasPlayedDraftRecoveryVoice || isPlayingDraftRecoveryVoice) return;
+
+    setIsPlayingDraftRecoveryVoice(true);
+    setHasPlayedDraftRecoveryVoice(true);
+
+    const prompt = `Welcome back. You have an unsaved conversation from earlier. Say "continue" to pick up where you left off, or say "start fresh" to begin a new conversation.`;
+
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: prompt })
+      });
+
+      if (!response.ok) throw new Error('TTS failed');
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      if (draftRecoveryAudioRef.current) draftRecoveryAudioRef.current.pause();
+
+      const audio = new Audio(audioUrl);
+      draftRecoveryAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlayingDraftRecoveryVoice(false);
+        URL.revokeObjectURL(audioUrl);
+        // Start listening for voice commands
+        if (isDraftRecoverySupported) {
+          setTimeout(() => {
+            resetDraftRecoveryTranscript();
+            startDraftRecoveryListening();
+          }, 500);
+        }
+      };
+
+      audio.onerror = () => {
+        setIsPlayingDraftRecoveryVoice(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      await audio.play();
+    } catch {
+      setIsPlayingDraftRecoveryVoice(false);
+    }
+  }, [hasPlayedDraftRecoveryVoice, isPlayingDraftRecoveryVoice, isDraftRecoverySupported, resetDraftRecoveryTranscript, startDraftRecoveryListening]);
+
+  // Play draft recovery voice when modal shows
+  useEffect(() => {
+    if (showDraftRecovery && recoveredDraft && !hasPlayedDraftRecoveryVoice) {
+      // Small delay to let the modal render
+      const timer = setTimeout(() => {
+        playDraftRecoveryVoice();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showDraftRecovery, recoveredDraft, hasPlayedDraftRecoveryVoice, playDraftRecoveryVoice]);
 
   // Play voice introduction
   const playVoiceIntroduction = async () => {
@@ -779,7 +857,7 @@ export default function ConversationPage() {
   };
 
   // Handle recovering a draft
-  const handleRecoverDraft = () => {
+  const handleRecoverDraft = useCallback(() => {
     if (recoveredDraft) {
       setMessages(recoveredDraft.messages);
       setHasPlayedIntro(true);
@@ -787,14 +865,44 @@ export default function ConversationPage() {
       sessionStorage.setItem('embers_intro_played', 'true');
     }
     setShowDraftRecovery(false);
-  };
+    // Stop any draft recovery audio
+    if (draftRecoveryAudioRef.current) {
+      draftRecoveryAudioRef.current.pause();
+    }
+  }, [recoveredDraft]);
 
   // Handle discarding a draft
-  const handleDiscardDraft = () => {
+  const handleDiscardDraft = useCallback(() => {
     clearDraft();
     setShowDraftRecovery(false);
     setRecoveredDraft(null);
-  };
+    // Stop any draft recovery audio
+    if (draftRecoveryAudioRef.current) {
+      draftRecoveryAudioRef.current.pause();
+    }
+  }, [clearDraft]);
+
+  // Process draft recovery voice commands
+  useEffect(() => {
+    if (!draftRecoveryTranscript || isPlayingDraftRecoveryVoice || !showDraftRecovery) return;
+
+    const lowerTranscript = draftRecoveryTranscript.toLowerCase().trim();
+
+    // Check for "continue" command
+    if (lowerTranscript.includes('continue') || isAffirmative(lowerTranscript)) {
+      stopDraftRecoveryListening();
+      handleRecoverDraft();
+      return;
+    }
+
+    // Check for "start fresh" command
+    if (lowerTranscript.includes('start fresh') || lowerTranscript.includes('fresh') ||
+        lowerTranscript.includes('new') || lowerTranscript.includes('no')) {
+      stopDraftRecoveryListening();
+      handleDiscardDraft();
+      return;
+    }
+  }, [draftRecoveryTranscript, isPlayingDraftRecoveryVoice, showDraftRecovery, isAffirmative, stopDraftRecoveryListening, handleRecoverDraft, handleDiscardDraft]);
 
   if (showSessionEnding) {
     const style = userStyleService.getStyle();
@@ -832,19 +940,50 @@ export default function ConversationPage() {
       {/* Inactivity prompt */}
       <InactivityPrompt isVisible={showInactivityPrompt} onContinue={() => { setShowInactivityPrompt(false); resetInactivityTimer(); }} onSaveAndExit={handleSaveStory} />
 
-      {/* Draft recovery prompt */}
+      {/* Draft recovery prompt - Voice Activated */}
       {showDraftRecovery && recoveredDraft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-[#0a0908]/90 backdrop-blur-sm" />
           <div className="relative bg-[#151312] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center">
+            {/* Listening indicator */}
+            {isDraftRecoveryListening && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-4 py-1 flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-[#f9f7f2]/80 text-xs">Listening...</span>
+              </div>
+            )}
+
+            {/* Speaking indicator */}
+            {isPlayingDraftRecoveryVoice && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-4 py-1">
+                <span className="text-[#f9f7f2]/80 text-xs animate-pulse">Ember is speaking...</span>
+              </div>
+            )}
+
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Welcome back</h3>
             <p className="text-sm text-[#f9f7f2]/50 mb-2">
               You have an unsaved conversation from earlier.
             </p>
-            <p className="text-xs text-[#f9f7f2]/30 mb-4">
+            <p className="text-xs text-[#f9f7f2]/30 mb-3">
               Saved {new Date(recoveredDraft.savedAt).toLocaleString()}
             </p>
-            <div className="flex gap-3 mt-6">
+
+            {/* Voice instruction */}
+            <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-3 mb-4">
+              <p className="text-[#f9f7f2]/70 text-sm">
+                Say <span className="text-[#E86D48] font-semibold">&ldquo;continue&rdquo;</span> or{' '}
+                <span className="text-[#E86D48] font-semibold">&ldquo;start fresh&rdquo;</span>
+              </p>
+            </div>
+
+            {/* Live transcript */}
+            {isDraftRecoveryListening && draftRecoveryTranscript && (
+              <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 mb-4">
+                <p className="text-[#f9f7f2]/60 text-sm">&ldquo;{draftRecoveryTranscript}&rdquo;</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
               <button
                 onClick={handleDiscardDraft}
                 className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm"
