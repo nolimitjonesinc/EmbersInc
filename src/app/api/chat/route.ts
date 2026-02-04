@@ -56,12 +56,17 @@ function getPersonalizedOpening(params: {
     commonThemes
   })
 
-  // Add persona-specific flavor
+  // Add persona-specific opening flavor based on new archetype system
   const personaFlavors: Record<string, string> = {
-    rose: `Oh, ${userName}, how lovely! `,
-    emma: `${userName}, this is so exciting! `,
-    marcus: `${userName}, I look forward to documenting this. `,
-    sam: `Alright ${userName}, let's do this! `
+    ember: '', // Default Ember uses the opening as-is
+    warmWitness: `${userName}, before we begin - I want you to know this is all about what YOU want to share. `,
+    gentleExcavator: `${userName}, I'm so glad you're here. `,
+    curiousCompanion: `Hey ${userName}! `,
+    intimateExplorer: `${userName}, thank you for being here. `,
+    playfulFriend: `Alright ${userName}, let's do this! `,
+    griefHolder: `${userName}, I'm here. Take all the time you need. `,
+    wiseElder: `Oh, ${userName}, sweetheart, how lovely to see you. `,
+    fascinatedYouth: `${userName}! I'm so excited to hear your stories! `
   }
 
   const flavor = personaFlavors[personaId] || ''
@@ -70,9 +75,13 @@ function getPersonalizedOpening(params: {
 }
 
 /**
- * Enhanced system prompt with therapeutic interview approach
+ * Add user-specific context to the system prompt
+ *
+ * Note: The core therapeutic rules (Five Sacred Rules, emotional state responses,
+ * response format) are now embedded in EMBER_CORE_IDENTITY in definitions.ts.
+ * This function only adds dynamic user context on top of that foundation.
  */
-function getTherapeuticSystemPrompt(params: {
+function addUserContext(params: {
   basePrompt: string
   selectedInterests?: string[]
   userContext?: {
@@ -83,71 +92,36 @@ function getTherapeuticSystemPrompt(params: {
 }): string {
   const { basePrompt, selectedInterests = [], userContext } = params
 
-  const interestContext = selectedInterests.length > 0
-    ? `\n\nUser's selected story interests: ${selectedInterests.join(', ')}. Gently guide questions toward these topics when natural.`
-    : ''
+  // Build user-specific context additions
+  const contextParts: string[] = []
 
-  const peopleContext = userContext?.frequentlyMentionedPeople?.length
-    ? `\n\nPeople the user has mentioned before: ${userContext.frequentlyMentionedPeople.join(', ')}. Reference these naturally to show you remember.`
-    : ''
+  if (selectedInterests.length > 0) {
+    contextParts.push(`USER'S SELECTED STORY INTERESTS: ${selectedInterests.join(', ')}. When natural, gently guide toward these topics - but always follow their lead.`)
+  }
 
-  const timeframeContext = userContext?.preferredTimeframes?.length
-    ? `\n\nTimeframes the user enjoys discussing: ${userContext.preferredTimeframes.join(', ')}.`
-    : ''
+  if (userContext?.frequentlyMentionedPeople?.length) {
+    contextParts.push(`PEOPLE THEY'VE MENTIONED BEFORE: ${userContext.frequentlyMentionedPeople.join(', ')}. Reference these naturally to show you remember their stories.`)
+  }
 
-  const themeContext = userContext?.commonThemes?.length
-    ? `\n\nRecurring themes in user's stories: ${userContext.commonThemes.join(', ')}.`
-    : ''
+  if (userContext?.preferredTimeframes?.length) {
+    contextParts.push(`TIMEFRAMES THEY ENJOY DISCUSSING: ${userContext.preferredTimeframes.join(', ')}.`)
+  }
 
-  const therapeuticAddition = `
+  if (userContext?.commonThemes?.length) {
+    contextParts.push(`RECURRING THEMES IN THEIR STORIES: ${userContext.commonThemes.join(', ')}. These are meaningful to them.`)
+  }
 
-THERAPEUTIC INTERVIEW APPROACH:
-You are a warm, patient interviewer helping users preserve their life stories. Your role is to make them feel heard, valued, and comfortable sharing.
+  // Only add the context section if there's actually context to add
+  if (contextParts.length === 0) {
+    return basePrompt
+  }
 
-1. VALIDATION FIRST - Always Acknowledge Before Asking
-Start EVERY response by acknowledging what they just shared. Choose from these patterns:
-- "That's beautiful..." / "What a lovely memory..."
-- "I can picture that..." / "I love how you described..."
-- "Thank you for sharing that..." / "That sounds so meaningful..."
-- "[Their key word/phrase]... that's such a vivid detail."
-- "It sounds like [person/place] meant a lot to you..."
+  const contextAddition = `
 
-2. USE THEIR WORDS BACK (Reflection Technique)
-When they share something, echo their specific language:
-- If they say "my grandmother's warm kitchen" → "That warm kitchen sounds like such a special place..."
-- If they mention "the smell of coffee" → "The smell of coffee... where does that take you?"
-- If they describe someone as "always laughing" → "Someone who was always laughing... tell me more about them."
-This shows you're truly listening and helps them go deeper.
+ADDITIONAL USER CONTEXT (use this to personalize your responses):
+${contextParts.join('\n')}`
 
-3. ONE QUESTION AT A TIME
-- Never ask multiple questions
-- Make your question specific to what they just mentioned
-- Keep questions simple and sensory-based when possible:
-  "What did that look like?" / "What did that feel like?" / "Who else was there?"
-
-4. MEMORY UNLOCKING
-Help them visualize and remember:
-- "Close your eyes and picture that moment. What do you see?"
-- "If you were back in that [kitchen/room/place] right now, what would you notice first?"
-- "What would [person they mentioned] say if they could see you now?"
-
-5. COMFORTABLE PACING
-- If their answer is brief, gently encourage: "Tell me more about that..."
-- If they pause, it's okay: "Take your time... I'm here."
-- If they seem uncertain: "There's no wrong answer - whatever comes to mind."
-- Never rush to the next topic
-
-RESPONSE FORMAT:
-1. Start with warm acknowledgment (using their words when possible)
-2. Optional: brief reflection or observation (1 sentence max)
-3. End with exactly ONE gentle follow-up question
-
-Example: User says "My grandma always made this special bread on Sundays"
-Good: "Special bread on Sundays... that sounds like such a beautiful tradition. What was it like being in her kitchen while she baked?"
-Bad: "That's nice! What kind of bread? Did she teach you? What else did she cook?"
-${interestContext}${peopleContext}${timeframeContext}${themeContext}`
-
-  return basePrompt + therapeuticAddition
+  return basePrompt + contextAddition
 }
 
 export async function POST(request: NextRequest) {
@@ -169,8 +143,8 @@ export async function POST(request: NextRequest) {
     const personaData = getPersona(persona)
     const basePrompt = getPersonaPrompt(persona, userName)
 
-    // Enhance with therapeutic approach
-    const systemPrompt = getTherapeuticSystemPrompt({
+    // Add user-specific context (core therapeutic rules are now in EMBER_CORE_IDENTITY)
+    const systemPrompt = addUserContext({
       basePrompt,
       selectedInterests,
       userContext: {
