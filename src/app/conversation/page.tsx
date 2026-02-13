@@ -99,6 +99,7 @@ export default function ConversationPage() {
   const [ttsFailureNotice, setTtsFailureNotice] = useState<string | null>(null);
 
   // === Refs ===
+  const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const idleNudgeTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -270,6 +271,42 @@ export default function ConversationPage() {
     onAutoSave: handleAutoSave,
     enabled: conversation.messages.length >= 2 && !tts.isSpeaking && !conversation.isProcessing,
   });
+
+  // === Keyboard shortcuts ===
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Escape cancels current operation
+        if (tts.isSpeaking) { tts.stopAllAudio(); }
+        if (isListening) { stopListening(); }
+        if (isRecording) { stopRecording(); }
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tts, isListening, isRecording, stopListening, stopRecording]);
+
+  // === Focus management ===
+  // Return focus to input after TTS finishes (unless listening resumes)
+  useEffect(() => {
+    if (!tts.isSpeaking && !isListening && !isRecording && !conversation.isProcessing) {
+      // Small delay so auto-resume listening has a chance to fire first
+      const timer = setTimeout(() => {
+        if (!isListening && !isRecording) {
+          inputRef.current?.focus();
+        }
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [tts.isSpeaking, isListening, isRecording, conversation.isProcessing]);
+
+  // Compute voice status for screen readers
+  const voiceStatus = isListening ? 'Listening...' :
+    tts.isSpeaking ? 'Embers is speaking...' :
+    conversation.isProcessing ? 'Gathering thoughts...' :
+    isTranscribing ? 'Processing your voice...' :
+    tts.isLoadingTTS ? 'Preparing to speak...' : '';
 
   // === Error sync ===
   useEffect(() => { if (recorderError) conversation.setError(recorderError); }, [recorderError]);
@@ -588,6 +625,15 @@ export default function ConversationPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0908] relative overflow-hidden">
+      {/* Screen reader: voice status announcements */}
+      <div aria-live="polite" role="status" className="sr-only">
+        {voiceStatus}
+      </div>
+      {/* Screen reader: error announcements */}
+      <div aria-live="assertive" role="alert" className="sr-only">
+        {conversation.error || ttsFailureNotice || ''}
+      </div>
+
       {/* Ambient background glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div
@@ -680,7 +726,7 @@ export default function ConversationPage() {
                 {story.isSaving ? 'Saving...' : 'Save Story'}
               </button>
             )}
-            <Link href="/life-book" className="text-[#f9f7f2]/30 hover:text-[#f9f7f2]/60 text-sm">My Stories</Link>
+            <Link href="/life-book" className="text-[#f9f7f2]/50 hover:text-[#f9f7f2]/80 text-sm">My Stories</Link>
           </div>
         </div>
       </header>
@@ -693,21 +739,21 @@ export default function ConversationPage() {
               {conversation.messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${msg.role === 'user' ? 'bg-[#E86D48]/15 border border-[#E86D48]/20' : 'bg-white/5 border border-white/5'}`}>
-                    <p className="text-[15px] leading-relaxed font-serif text-[#f9f7f2]/90 whitespace-pre-line">{msg.content}</p>
+                    <p className="text-base leading-relaxed font-serif text-[#f9f7f2]/90 whitespace-pre-line">{msg.content}</p>
                   </div>
                 </div>
               ))}
               {hasActiveInput && (
                 <div className="flex justify-end">
                   <div className="max-w-[80%] rounded-2xl px-5 py-3 bg-[#E86D48]/10 border border-dashed border-[#E86D48]/30">
-                    <p className="text-[15px] font-serif text-[#f9f7f2]/60">{transcript}<span className="opacity-40">{interimTranscript}</span></p>
+                    <p className="text-base font-serif text-[#f9f7f2]/60">{transcript}<span className="opacity-40">{interimTranscript}</span></p>
                   </div>
                 </div>
               )}
               {(conversation.isProcessing || tts.isLoadingTTS || isTranscribing) && (
                 <div className="flex justify-start">
                   <div className="bg-white/5 border border-white/5 rounded-2xl px-5 py-3">
-                    <p className="text-[#f9f7f2]/40 font-serif text-sm animate-pulse">
+                    <p className="text-[#f9f7f2]/60 font-serif text-sm animate-pulse">
                       {conversation.isProcessing ? 'Gathering my thoughts...' : isTranscribing ? 'Listening to your story...' : (tts.warmLoadingMessage || 'Embers is listening...')}
                     </p>
                   </div>
@@ -726,10 +772,10 @@ export default function ConversationPage() {
               <h1 className="text-3xl md:text-4xl font-serif text-[#f9f7f2]/90 mb-4">
                 {conversation.userName ? (conversation.userContext.isReturningUser ? `Welcome back, ${conversation.userName}` : `Hello, ${conversation.userName}`) : 'Hello'}
               </h1>
-              <p className="text-lg text-[#f9f7f2]/40 max-w-md mx-auto font-serif italic leading-relaxed">
+              <p className="text-lg text-[#f9f7f2]/60 max-w-md mx-auto font-serif italic leading-relaxed">
                 {conversation.starterPrompt}
               </p>
-              <p className="text-sm text-[#f9f7f2]/20 mt-6">Tap the flame to begin</p>
+              <p className="text-sm text-[#f9f7f2]/50 mt-6">Tap the flame to begin</p>
             </div>
           )}
 
@@ -749,7 +795,7 @@ export default function ConversationPage() {
                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                 <p className="text-lg text-[#f9f7f2]/90 font-serif">Recording {formattedDuration}</p>
               </div>
-              <p className="text-sm text-[#f9f7f2]/40 mt-3 font-serif">Tap the flame when you&apos;re finished</p>
+              <p className="text-sm text-[#f9f7f2]/60 mt-3 font-serif">Tap the flame when you&apos;re finished</p>
             </div>
           )}
 
@@ -804,12 +850,14 @@ export default function ConversationPage() {
       <footer className="relative z-20 pb-8 pt-4 px-6">
         <form onSubmit={handleTextSubmit} className="max-w-xl mx-auto flex gap-3">
           <input
+            ref={inputRef}
             type="text"
             placeholder="or type here..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             disabled={conversation.isProcessing || tts.isSpeaking || isRecording || isTranscribing}
-            className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2]/90 placeholder:text-[#f9f7f2]/20 focus:outline-none focus:border-[#E86D48]/30 text-sm"
+            aria-label="Type your message"
+            className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2]/90 placeholder:text-[#f9f7f2]/40 focus:outline-none focus:border-[#E86D48]/30 text-sm"
           />
           <button
             type="submit"

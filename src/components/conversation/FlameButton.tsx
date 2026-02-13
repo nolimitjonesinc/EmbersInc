@@ -94,7 +94,13 @@ export function FlameButton({
       onClick={onClick}
       role="button"
       tabIndex={0}
-      aria-label={isListening ? 'Listening... tap to stop' : 'Tap to start speaking'}
+      aria-label={
+        isListening ? 'Listening to you. Tap to stop.' :
+        isSpeaking ? 'Embers is speaking. Tap to stop.' :
+        isProcessing ? 'Thinking about what you shared...' :
+        isLoadingTTS ? 'Preparing to speak...' :
+        'Tap to start speaking'
+      }
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
