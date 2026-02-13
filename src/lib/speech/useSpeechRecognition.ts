@@ -222,8 +222,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch {
-        // Ignore errors when stopping
+      } catch (err) {
+        console.warn('[SpeechRecognition] Error stopping previous instance:', err);
       }
     }
 
@@ -321,8 +321,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
                 restartCountRef.current++;
                 try {
                   recognition.start();
-                } catch {
-                  // If start fails, create new recognition
+                } catch (err) {
+                  console.warn('[SpeechRecognition] Restart after abort failed, creating new instance:', err);
                   const newRecognition = createRecognition();
                   if (newRecognition) {
                     recognitionRef.current = newRecognition;
@@ -356,8 +356,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
                 restartCountRef.current++;
                 try {
                   recognition.start();
-                } catch {
-                  // Ignore
+                } catch (err) {
+                  console.warn('[SpeechRecognition] Restart after network error failed:', err);
                 }
               }
             }, 500);
@@ -365,7 +365,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           }
           setState((prev) => ({
             ...prev,
-            error: 'Network error. Please check your connection.',
+            error: 'I need an internet connection to hear you. Please check your connection, or type instead.',
           }));
           break;
         default:
@@ -376,8 +376,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
                 restartCountRef.current++;
                 try {
                   recognition.start();
-                } catch {
-                  // Ignore
+                } catch (err) {
+                  console.warn('[SpeechRecognition] Restart after unknown error failed:', err);
                 }
               }
             }, 200);
@@ -413,7 +413,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
             if (wantListeningRef.current) {
               try {
                 recognition.start();
-              } catch {
+              } catch (err) {
+                console.warn('[SpeechRecognition] Restart on end failed, creating new instance:', err);
                 // If start fails, create new recognition instance
                 const newRecognition = createRecognition();
                 if (newRecognition) {
@@ -464,8 +465,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch {
-        // Ignore errors when stopping
+      } catch (err) {
+        console.warn('[SpeechRecognition] Error during stop:', err);
       }
     }
     clearSilenceTracking();
@@ -492,8 +493,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
-        } catch {
-          // Ignore
+        } catch (err) {
+          console.warn('[SpeechRecognition] Error during unmount cleanup:', err);
         }
       }
       clearSilenceTracking();

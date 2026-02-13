@@ -17,8 +17,21 @@ export async function POST(request: NextRequest) {
     const authResult = await requireAuth(request)
     if (authResult instanceof NextResponse) return authResult
 
-    const body: AnalyzeRequest = await request.json()
-    const { imageBase64, previousContext } = body
+    let body: AnalyzeRequest
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request' },
+        { status: 400 }
+      )
+    }
+
+    const { imageBase64 } = body
+    // Sanitize previousContext: cap length, strip control characters
+    const previousContext = body.previousContext
+      ? body.previousContext.slice(0, 500).replace(/[\x00-\x1f\x7f]/g, '')
+      : undefined
 
     if (!imageBase64) {
       return NextResponse.json(
@@ -107,7 +120,7 @@ Keep your response conversational and warm, like a friend looking through photos
   } catch (error) {
     console.error('Photo analysis error:', error)
     return NextResponse.json(
-      { error: 'Failed to analyze photo' },
+      { error: 'I couldn\'t look at that photo right now. Could you try sharing it again?' },
       { status: 500 }
     )
   }

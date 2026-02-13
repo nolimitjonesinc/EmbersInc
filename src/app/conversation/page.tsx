@@ -16,6 +16,7 @@ import { useConversation } from '@/lib/hooks/useConversation';
 import { useStoryPersistence } from '@/lib/hooks/useStoryPersistence';
 import { Message } from '@/types';
 import { userStyleService } from '@/lib/services/userStyleService';
+import { ERROR_MESSAGES } from '@/lib/errors/messages';
 
 // --- Constants ---
 
@@ -95,6 +96,7 @@ export default function ConversationPage() {
   const [useWhisperFallback, setUseWhisperFallback] = useState(false);
   const [hasPlayedDraftRecoveryVoice, setHasPlayedDraftRecoveryVoice] = useState(false);
   const [isPlayingDraftRecoveryVoice, setIsPlayingDraftRecoveryVoice] = useState(false);
+  const [ttsFailureNotice, setTtsFailureNotice] = useState<string | null>(null);
 
   // === Refs ===
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -102,6 +104,7 @@ export default function ConversationPage() {
   const idleNudgeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
   const introPlayedRef = useRef(false);
+  const introRetryCountRef = useRef(0);
   const sendMessageRef = useRef<(content: string) => void>(() => {});
   const transcriptRef = useRef('');
   const messagesLengthRef = useRef(0);
@@ -271,6 +274,20 @@ export default function ConversationPage() {
   // === Error sync ===
   useEffect(() => { if (recorderError) conversation.setError(recorderError); }, [recorderError]);
   useEffect(() => { if (speechError) conversation.setError(speechError); }, [speechError]);
+  // Surface draft recovery failure as a brief notice
+  useEffect(() => {
+    if (story.draftRecoveryError) {
+      setTtsFailureNotice(story.draftRecoveryError);
+      setTimeout(() => setTtsFailureNotice(null), 6000);
+    }
+  }, [story.draftRecoveryError]);
+  // Surface audio upload failure after save
+  useEffect(() => {
+    if (story.audioUploadFailed) {
+      setTtsFailureNotice(ERROR_MESSAGES.savePartial);
+      setTimeout(() => setTtsFailureNotice(null), 6000);
+    }
+  }, [story.audioUploadFailed]);
 
   // Auto-scroll messages
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
@@ -330,7 +347,17 @@ export default function ConversationPage() {
         if (isSupported) setTimeout(() => startListening(), 600);
       },
       onError: () => {
+        // Retry once, then fall back to text-only
+        if (introRetryCountRef.current < 1) {
+          introRetryCountRef.current++;
+          introPlayedRef.current = false;
+          setIsPlayingIntro(false);
+          setTimeout(() => playVoiceIntroduction(), 500);
+          return;
+        }
         markIntroDone();
+        setTtsFailureNotice(ERROR_MESSAGES.ttsFailed);
+        setTimeout(() => setTtsFailureNotice(null), 5000);
         if (isSupported) setTimeout(() => startListening(), 600);
       },
     });
@@ -407,6 +434,9 @@ export default function ConversationPage() {
           }
         },
         onError: () => {
+          // Show text fallback notice — the response text is already in messages
+          setTtsFailureNotice(ERROR_MESSAGES.ttsFailed);
+          setTimeout(() => setTtsFailureNotice(null), 4000);
           if (shouldAutoResumeRef.current) {
             shouldAutoResumeRef.current = false;
             resumeListeningAfterPlayback();
@@ -757,6 +787,15 @@ export default function ConversationPage() {
         <div className="fixed bottom-24 left-4 right-4 z-30">
           <div className="max-w-md mx-auto bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
             <p className="text-center text-red-400 text-sm">{conversation.error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* TTS failure notice */}
+      {ttsFailureNotice && !conversation.error && (
+        <div className="fixed bottom-24 left-4 right-4 z-30">
+          <div className="max-w-md mx-auto bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+            <p className="text-center text-amber-400 text-sm">{ttsFailureNotice}</p>
           </div>
         </div>
       )}

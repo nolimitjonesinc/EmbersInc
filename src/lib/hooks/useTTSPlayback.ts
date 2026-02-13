@@ -110,7 +110,8 @@ export function useTTSPlayback(): UseTTSPlaybackReturn {
       };
 
       await audio.play();
-    } catch {
+    } catch (err) {
+      console.warn('[TTS] Playback failed:', err);
       isSpeakingRef.current = false;
       setIsSpeaking(false);
       setIsLoadingTTS(false);

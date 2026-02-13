@@ -27,9 +27,13 @@ export interface UseStoryPersistenceReturn {
   savedStoriesCount: number;
   conversationSummary: string | null;
   showSessionEnding: boolean;
+  /** True if audio upload failed but story text was saved */
+  audioUploadFailed: boolean;
   /** Draft recovery state */
   showDraftRecovery: boolean;
   recoveredDraft: DraftData | null;
+  /** Non-null if draft recovery failed on mount */
+  draftRecoveryError: string | null;
   /** Save story to API or localStorage. Returns true if saved. */
   saveStory: (
     messages: Message[],
@@ -75,8 +79,10 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
   const [savedStoriesCount, setSavedStoriesCount] = useState(0);
   const [conversationSummary, setConversationSummary] = useState<string | null>(null);
   const [showSessionEnding, setShowSessionEnding] = useState(false);
+  const [audioUploadFailed, setAudioUploadFailed] = useState(false);
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
   const [recoveredDraft, setRecoveredDraft] = useState<DraftData | null>(null);
+  const [draftRecoveryError, setDraftRecoveryError] = useState<string | null>(null);
 
   // Load stories count + check for draft on mount
   useEffect(() => {
@@ -109,6 +115,8 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
       }
     } catch (err) {
       console.warn('[StoryPersistence] Could not parse saved draft:', err);
+      // Don't delete the draft — keep it in localStorage for manual recovery
+      setDraftRecoveryError('We found a draft but couldn\'t load it. Starting fresh — your previous stories are still safe.');
     }
   }, []);
 
@@ -169,6 +177,7 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
             }
           } catch (audioErr) {
             console.error('[StoryPersistence] Failed to upload audio:', audioErr);
+            setAudioUploadFailed(true);
           }
         }
       } else if (response.status === 401) {
@@ -240,8 +249,10 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
     savedStoriesCount,
     conversationSummary,
     showSessionEnding,
+    audioUploadFailed,
     showDraftRecovery,
     recoveredDraft,
+    draftRecoveryError,
     saveStory,
     recoverDraft,
     discardDraft,

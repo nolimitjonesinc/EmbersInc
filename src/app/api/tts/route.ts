@@ -88,7 +88,16 @@ export async function POST(request: NextRequest) {
     const authResult = await softAuth(request);
     if (authResult instanceof NextResponse) return authResult;
 
-    const body: TTSRequestBody = await request.json();
+    let body: TTSRequestBody;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const { text, provider } = body;
 
     if (!text || text.trim().length === 0) {
@@ -98,8 +107,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Limit text length for TTS
+    // Limit text length for TTS — warn if truncated
+    const wasTruncated = text.length > 4000;
     const truncatedText = text.slice(0, 4000);
+    if (wasTruncated) {
+      console.warn(`[TTS] Text truncated from ${text.length} to 4000 chars`);
+    }
 
     let audioBuffer: ArrayBuffer;
     let usedProvider: string;
@@ -132,17 +145,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Return the audio file
-    return new NextResponse(audioBuffer, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'Content-Length': audioBuffer.byteLength.toString(),
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audioBuffer.byteLength.toString(),
+    };
+    if (wasTruncated) {
+      headers['X-Text-Truncated'] = 'true';
+      headers['X-Original-Length'] = String(text.length);
+    }
+    return new NextResponse(audioBuffer, { headers });
   } catch (error) {
     console.error('TTS API error:', error);
 
     return NextResponse.json(
-      { error: 'Failed to generate speech. Please try again.' },
+      { error: 'Voice playback is temporarily unavailable. You can still read the response.' },
       { status: 500 }
     );
   }

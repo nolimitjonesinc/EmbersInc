@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOpenAIClient } from '@/lib/openai/client'
+import { RateLimitError, AuthenticationError, APIError } from 'openai'
 import { getPersonaPrompt, getPersona, DEFAULT_PERSONA } from '@/lib/personas/definitions'
 import { Message, ChatResponse, ChapterType } from '@/types'
 import {
@@ -12,6 +13,7 @@ import { allWarmPrompts } from '@/lib/prompts/warmEngagementPrompts'
 import { softAuth } from '@/lib/auth/getAuthContext'
 import { validateChatInput } from '@/lib/auth/validateChatInput'
 import { trimConversationHistory } from '@/lib/chat/trimConversationHistory'
+import { ERROR_MESSAGES } from '@/lib/errors/messages'
 
 export const runtime = 'edge'
 
@@ -140,7 +142,15 @@ export async function POST(request: NextRequest) {
     const authResult = await softAuth(request)
     if (authResult instanceof NextResponse) return authResult
 
-    const body: ChatRequestBody = await request.json()
+    let body: ChatRequestBody
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: ERROR_MESSAGES.invalidInput },
+        { status: 400 }
+      )
+    }
 
     // Input validation — block system role injection, cap lengths
     const validation = validateChatInput(body.messages)
@@ -260,23 +270,29 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Chat API error:', error)
 
-    if (error instanceof Error) {
-      if (error.message.includes('API key')) {
-        return NextResponse.json(
-          { error: 'API configuration error. Please try again later.' },
-          { status: 500 }
-        )
-      }
-      if (error.message.includes('rate limit')) {
-        return NextResponse.json(
-          { error: 'Too many requests. Please wait a moment and try again.' },
-          { status: 429 }
-        )
-      }
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: ERROR_MESSAGES.tooManyRequests },
+        { status: 429 }
+      )
+    }
+
+    if (error instanceof AuthenticationError) {
+      return NextResponse.json(
+        { error: ERROR_MESSAGES.aiConfig },
+        { status: 500 }
+      )
+    }
+
+    if (error instanceof APIError) {
+      return NextResponse.json(
+        { error: ERROR_MESSAGES.aiThinking },
+        { status: error.status || 502 }
+      )
     }
 
     return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
+      { error: ERROR_MESSAGES.generic },
       { status: 500 }
     )
   }
