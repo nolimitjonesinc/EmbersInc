@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
+import { getOpenAIClient } from '@/lib/openai/client'
+import { requireAuth } from '@/lib/auth/getAuthContext'
 
 export const runtime = 'nodejs'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+const MAX_BASE64_SIZE = 10 * 1024 * 1024 // 10MB
 
 interface AnalyzeRequest {
   imageBase64: string
@@ -14,12 +13,24 @@ interface AnalyzeRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // Strict auth — photo analysis is expensive (GPT-4o vision)
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+
     const body: AnalyzeRequest = await request.json()
     const { imageBase64, previousContext } = body
 
     if (!imageBase64) {
       return NextResponse.json(
         { error: 'Image data is required' },
+        { status: 400 }
+      )
+    }
+
+    // Size limit for base64 data
+    if (imageBase64.length > MAX_BASE64_SIZE) {
+      return NextResponse.json(
+        { error: 'Image is too large. Please use a smaller photo.' },
         { status: 400 }
       )
     }
@@ -43,6 +54,7 @@ ${previousContext ? `Previous context about this photo: ${previousContext}` : ''
 
 Keep your response conversational and warm, like a friend looking through photos together.`
 
+    const openai = getOpenAIClient()
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
@@ -71,7 +83,14 @@ Keep your response conversational and warm, like a friend looking through photos
       max_tokens: 500,
     })
 
-    const analysis = response.choices[0]?.message?.content || ''
+    const analysis = response.choices[0]?.message?.content
+
+    if (!analysis) {
+      return NextResponse.json(
+        { error: 'We could not analyze this photo right now. Please try again.' },
+        { status: 502 }
+      )
+    }
 
     // Extract potential tags from the analysis
     const tags = extractTagsFromAnalysis(analysis)

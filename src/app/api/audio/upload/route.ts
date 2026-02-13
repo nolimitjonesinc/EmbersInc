@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get public URL (signed URL for private bucket)
+    // Get signed URL for private bucket (7 days, refresh as needed)
     const { data: urlData } = await supabase.storage
       .from('embers-audio')
-      .createSignedUrl(path, 60 * 60 * 24 * 365) // 1 year expiry
+      .createSignedUrl(path, 60 * 60 * 24 * 7) // 7 day expiry
 
     const audioUrl = urlData?.signedUrl || ''
 

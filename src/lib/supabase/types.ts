@@ -41,7 +41,7 @@ export interface Database {
           updated_at?: string
         }
       }
-      stories: {
+      embers_stories: {
         Row: {
           id: string
           user_id: string
@@ -85,37 +85,28 @@ export interface Database {
           updated_at?: string
         }
       }
-      conversations: {
+      embers_drafts: {
         Row: {
           id: string
           user_id: string
-          story_id: string | null
           messages: Json
-          chapter: string | null
-          persona: string | null
-          is_active: boolean
+          saved_at: string
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          story_id?: string | null
           messages?: Json
-          chapter?: string | null
-          persona?: string | null
-          is_active?: boolean
+          saved_at?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           user_id?: string
-          story_id?: string | null
           messages?: Json
-          chapter?: string | null
-          persona?: string | null
-          is_active?: boolean
+          saved_at?: string
           created_at?: string
           updated_at?: string
         }
@@ -149,7 +140,7 @@ export interface Database {
           updated_at?: string
         }
       }
-      family_members: {
+      embers_family_members: {
         Row: {
           id: string
           family_group_id: string
@@ -237,21 +228,21 @@ export type User = Database['public']['Tables']['users']['Row']
 export type UserInsert = Database['public']['Tables']['users']['Insert']
 export type UserUpdate = Database['public']['Tables']['users']['Update']
 
-export type Story = Database['public']['Tables']['stories']['Row']
-export type StoryInsert = Database['public']['Tables']['stories']['Insert']
-export type StoryUpdate = Database['public']['Tables']['stories']['Update']
+export type Story = Database['public']['Tables']['embers_stories']['Row']
+export type StoryInsert = Database['public']['Tables']['embers_stories']['Insert']
+export type StoryUpdate = Database['public']['Tables']['embers_stories']['Update']
 
-export type Conversation = Database['public']['Tables']['conversations']['Row']
-export type ConversationInsert = Database['public']['Tables']['conversations']['Insert']
-export type ConversationUpdate = Database['public']['Tables']['conversations']['Update']
+export type Draft = Database['public']['Tables']['embers_drafts']['Row']
+export type DraftInsert = Database['public']['Tables']['embers_drafts']['Insert']
+export type DraftUpdate = Database['public']['Tables']['embers_drafts']['Update']
 
 export type FamilyGroup = Database['public']['Tables']['family_groups']['Row']
 export type FamilyGroupInsert = Database['public']['Tables']['family_groups']['Insert']
 export type FamilyGroupUpdate = Database['public']['Tables']['family_groups']['Update']
 
-export type FamilyMember = Database['public']['Tables']['family_members']['Row']
-export type FamilyMemberInsert = Database['public']['Tables']['family_members']['Insert']
-export type FamilyMemberUpdate = Database['public']['Tables']['family_members']['Update']
+export type FamilyMember = Database['public']['Tables']['embers_family_members']['Row']
+export type FamilyMemberInsert = Database['public']['Tables']['embers_family_members']['Insert']
+export type FamilyMemberUpdate = Database['public']['Tables']['embers_family_members']['Update']
 
 export type Photo = Database['public']['Tables']['photos']['Row']
 export type PhotoInsert = Database['public']['Tables']['photos']['Insert']

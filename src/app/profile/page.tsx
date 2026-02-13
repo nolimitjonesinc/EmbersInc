@@ -14,6 +14,12 @@ export default function ProfilePage() {
   const [voiceSpeed, setVoiceSpeed] = useState<'slow' | 'normal' | 'fast'>('normal');
   const [textSize, setTextSize] = useState<'normal' | 'large' | 'extra-large'>('large');
   const [saveMessage, setSaveMessage] = useState('');
+  const [stats, setStats] = useState({
+    totalStories: 0,
+    totalWords: 0,
+    chaptersStarted: 0,
+    daysActive: 0,
+  });
 
   useEffect(() => {
     // Load settings from localStorage
@@ -37,6 +43,48 @@ export default function ProfilePage() {
     if (storedTextSize) {
       setTextSize(storedTextSize);
     }
+
+    // Fetch real stats
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/stories');
+        if (response.ok) {
+          const data = await response.json();
+          const stories = data.stories || [];
+          const totalWords = stories.reduce((sum: number, s: { content?: string }) => {
+            return sum + (s.content ? s.content.split(/\s+/).length : 0);
+          }, 0);
+          const chapters = new Set(
+            stories.map((s: { chapter?: string }) => s.chapter).filter(Boolean)
+          );
+          setStats({
+            totalStories: stories.length,
+            totalWords,
+            chaptersStarted: chapters.size,
+            daysActive: 0, // calculated below
+          });
+        }
+      } catch (err) {
+        console.warn('[Profile] Could not fetch stories:', err);
+      }
+
+      // Calculate days active from session data
+      try {
+        const sessionStr = localStorage.getItem('embers_session_data');
+        if (sessionStr) {
+          const session = JSON.parse(sessionStr);
+          if (session.firstVisit) {
+            const firstVisit = new Date(session.firstVisit);
+            const now = new Date();
+            const days = Math.max(1, Math.ceil((now.getTime() - firstVisit.getTime()) / (1000 * 60 * 60 * 24)));
+            setStats(prev => ({ ...prev, daysActive: days }));
+          }
+        }
+      } catch {
+        // Session data not available — leave as 0
+      }
+    };
+    fetchStats();
   }, []);
 
   const handleSaveName = () => {
@@ -70,14 +118,6 @@ export default function ProfilePage() {
   const showSaveMessage = () => {
     setSaveMessage('Settings saved!');
     setTimeout(() => setSaveMessage(''), 2000);
-  };
-
-  // Stats (mock for now)
-  const stats = {
-    totalStories: 5,
-    totalWords: 2340,
-    chaptersStarted: 4,
-    daysActive: 7,
   };
 
   return (
@@ -191,7 +231,7 @@ export default function ProfilePage() {
               <div>
                 <h3 className="font-medium">Auto-play Responses</h3>
                 <p className="text-gray-500 text-sm">
-                  Automatically speak Ember&apos;s responses out loud
+                  Automatically speak Embers&apos; responses out loud
                 </p>
               </div>
               <button
@@ -298,7 +338,7 @@ export default function ProfilePage() {
                 <span className="text-2xl">🎙️</span>
                 <div>
                   <h3 className="font-medium">Share a Story</h3>
-                  <p className="text-gray-500 text-sm">Start a new conversation with Ember</p>
+                  <p className="text-gray-500 text-sm">Start a new conversation with Embers</p>
                 </div>
               </div>
               <span className="text-gray-400">→</span>

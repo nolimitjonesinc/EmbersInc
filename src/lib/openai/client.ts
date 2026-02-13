@@ -5,15 +5,17 @@ let _openai: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI {
   if (!_openai) {
-    _openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not set');
+    }
+    _openai = new OpenAI({ apiKey });
   }
   return _openai;
 }
 
 // System prompt for the AI conversation partner
-export const SYSTEM_PROMPT = `You are a warm, empathetic conversation partner helping someone preserve their life stories for their family. Your name is Ember.
+export const SYSTEM_PROMPT = `You are a warm, empathetic conversation partner helping someone preserve their life stories for their family. Your name is Embers.
 
 Your role:
 - Be a trusted friend who genuinely wants to hear their stories
@@ -50,6 +52,6 @@ export function getGreeting(userName: string, isReturning: boolean): string {
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
   } else {
-    return `Hello ${userName}, I'm Ember. I'm so glad you're here to share your stories. There's no right or wrong way to do this - just speak naturally, like we're having a conversation over coffee. What's a memory that's been on your mind lately?`;
+    return `Hello ${userName}, I'm Embers. I'm so glad you're here to share your stories. There's no right or wrong way to do this - just speak naturally, like we're having a conversation over coffee. What's a memory that's been on your mind lately?`;
   }
 }

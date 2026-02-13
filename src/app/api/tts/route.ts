@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PollyClient, SynthesizeSpeechCommand, Engine, OutputFormat, VoiceId } from '@aws-sdk/client-polly';
 import { getOpenAIClient } from '@/lib/openai/client';
+import { softAuth } from '@/lib/auth/getAuthContext';
 
 // Use Node.js runtime for AWS SDK compatibility
 export const runtime = 'nodejs';
@@ -83,6 +84,10 @@ async function generateWithOpenAI(text: string): Promise<ArrayBuffer> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth + rate limiting (allows anonymous but rate-limits harder)
+    const authResult = await softAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+
     const body: TTSRequestBody = await request.json();
     const { text, provider } = body;
 
@@ -131,7 +136,6 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Content-Length': audioBuffer.byteLength.toString(),
-        'X-TTS-Provider': usedProvider, // For debugging
       },
     });
   } catch (error) {

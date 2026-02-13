@@ -13,9 +13,16 @@ export async function middleware(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    // If Supabase is not configured, allow access (development mode)
+    // If Supabase is not configured, log a warning but still redirect to login
+    // (prevents silently disabling all auth in production)
     if (!supabaseUrl || !supabaseAnonKey) {
-      return response
+      console.warn(
+        '[Middleware] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing. ' +
+        'Protected routes will redirect to login. Set these env vars to enable authentication.'
+      )
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', pathname)
+      return NextResponse.redirect(loginUrl)
     }
 
     // Create a Supabase client to check auth

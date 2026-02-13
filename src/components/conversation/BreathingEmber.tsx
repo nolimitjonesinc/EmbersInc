@@ -53,7 +53,7 @@ export function BreathingEmber({
             : state === 'processing'
             ? 'Thinking...'
             : state === 'speaking'
-            ? 'Ember is speaking'
+            ? 'Embers is speaking'
             : 'Take your time...'
         }
       >

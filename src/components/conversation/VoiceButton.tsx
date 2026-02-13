@@ -29,7 +29,7 @@ export function VoiceButton({
   const getButtonLabel = () => {
     switch (state) {
       case 'speaking':
-        return 'Ember is speaking...';
+        return 'Embers is speaking...';
       case 'processing':
         return 'Thinking...';
       case 'listening':

@@ -11,10 +11,13 @@ import { useAudioRecorder } from '@/lib/speech/useAudioRecorder';
 import { useContinuousRecorder } from '@/lib/speech/useContinuousRecorder';
 import { useVoiceGuidedAutoSave, detectVoiceCommand } from '@/lib/hooks/useVoiceGuidedAutoSave';
 import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands';
+import { useTTSPlayback } from '@/lib/hooks/useTTSPlayback';
+import { useConversation } from '@/lib/hooks/useConversation';
+import { useStoryPersistence } from '@/lib/hooks/useStoryPersistence';
 import { Message } from '@/types';
-import { interestService } from '@/lib/services/interestService';
 import { userStyleService } from '@/lib/services/userStyleService';
-import { getPromptsForInterests, getRandomWarmPrompt } from '@/lib/prompts/promptSelector';
+
+// --- Constants ---
 
 const END_PHRASES = [
   'goodbye', 'good bye', 'bye bye', 'thank you', 'thanks',
@@ -24,27 +27,9 @@ const END_PHRASES = [
 ];
 
 function detectEndPhrase(text: string): boolean {
-  const lowerText = text.toLowerCase();
-  return END_PHRASES.some((phrase) => lowerText.includes(phrase));
+  return END_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));
 }
 
-// Warm, empathetic loading messages that rotate randomly
-const WARM_LOADING_MESSAGES = [
-  "Ember is listening...",
-  "Taking it all in...",
-  "Gathering my thoughts...",
-  "Reflecting on what you shared...",
-  "Just a moment...",
-  "Holding space for you...",
-  "With you shortly...",
-  "Savoring your words...",
-];
-
-function getRandomWarmMessage(): string {
-  return WARM_LOADING_MESSAGES[Math.floor(Math.random() * WARM_LOADING_MESSAGES.length)];
-}
-
-// Sensory-based opening questions - low emotional stakes, easy to answer
 const OPENING_QUESTIONS = [
   "What's a smell that instantly takes you back to a happy moment?",
   "What sound from your childhood can you still hear perfectly in your mind?",
@@ -56,235 +41,132 @@ const OPENING_QUESTIONS = [
   "What's something small that a loved one did that you'll never forget?",
 ];
 
-// Generate personalized greeting based on user context
 function generateVoiceIntroduction(
   userName?: string,
   isReturningUser?: boolean,
   mentionedPeople?: string[],
   commonThemes?: string[]
 ): { greeting: string; question: string } {
-  // Returning user with context
   if (isReturningUser && userName) {
     const returningGreetings = [
-      `Welcome back, ${userName}. It's good to hear from you again.`,
-      `Hello again, ${userName}. I've been thinking about your stories.`,
-      `${userName}, welcome back. I'm glad you're here.`,
+      `Welcome back, ${userName}. It's Embers. It's good to hear from you again.`,
+      `Hello again, ${userName}. It's Embers. I've been thinking about your stories.`,
+      `${userName}, welcome back. It's Embers. I'm glad you're here.`,
     ];
+    const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)];
 
-    let greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)];
-
-    // Personalize with mentioned people if available
     if (mentionedPeople && mentionedPeople.length > 0) {
       const person = mentionedPeople[Math.floor(Math.random() * mentionedPeople.length)];
       return {
         greeting,
-        question: `Last time you shared some wonderful stories. I'd love to hear more whenever you're ready. What memory has been on your mind lately? Or if you'd like, tell me more about ${person}.`
+        question: `Last time you shared some wonderful stories. I'd love to hear more whenever you're ready. What memory has been on your mind lately? Or if you'd like, tell me more about ${person}.`,
       };
     }
-
-    return {
-      greeting,
-      question: "What memory has been on your mind lately?"
-    };
+    return { greeting, question: "What memory has been on your mind lately?" };
   }
 
-  // New user introduction
-  const newUserGreeting = userName
-    ? `Hello, ${userName}. I'm Ember.`
-    : "Hello. I'm Ember.";
-
+  const newUserGreeting = userName ? `Hello, ${userName}. I'm Embers.` : "Hello. I'm Embers.";
   const introduction = `${newUserGreeting}
 
-I'm here to help you capture the stories and memories that matter most to you. There's no pressure, no right or wrong way to do this. Just your voice, your memories, and all the time you need.
+I'm here to help you preserve the stories and memories that matter most to you — the moments, the people, the experiences that shaped your life. Think of me as a patient friend who's genuinely curious about your life. You just talk, and I listen. I'll ask gentle questions to help your memories come alive.
 
-Think of me as a friend who's genuinely curious about your life. I'll ask questions, and you share whatever comes to mind.`;
+There's no rush, no pressure. Just your voice, your memories, and all the time you need. Everything you share is saved safely, and when you're ready, your family can treasure these stories forever.`;
 
   const question = OPENING_QUESTIONS[Math.floor(Math.random() * OPENING_QUESTIONS.length)];
-
-  return {
-    greeting: introduction,
-    question: `Let's start with something simple... ${question}`
-  };
+  return { greeting: introduction, question: `Let's start with something simple... ${question}` };
 }
 
 const INACTIVITY_TIMEOUT = 6 * 60 * 1000;
 
-// Generate a brief summary of what was shared
-function generateConversationSummary(messages: Message[]): string {
-  const userMessages = messages.filter(m => m.role === 'user');
-  if (userMessages.length === 0) return '';
-
-  // Extract key content from user messages
-  const content = userMessages.map(m => m.content).join(' ');
-
-  // Keep it brief - first 2-3 sentences worth
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
-  const summaryParts = sentences.slice(0, 3).map(s => s.trim());
-
-  if (summaryParts.length === 0) return content.slice(0, 200);
-
-  let summary = summaryParts.join('. ');
-  if (summary.length > 300) {
-    summary = summary.slice(0, 297) + '...';
-  }
-  if (!summary.endsWith('.') && !summary.endsWith('...')) {
-    summary += '.';
-  }
-
-  return summary;
-}
+// --- Component ---
 
 export default function ConversationPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isLoadingTTS, setIsLoadingTTS] = useState(false);
-  const [userName, setUserName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [savedStoryId, setSavedStoryId] = useState<string | null>(null);
-  const [savedStoryTitle, setSavedStoryTitle] = useState<string | null>(null);
-  const [conversationSummary, setConversationSummary] = useState<string | null>(null);
-  const [showSessionEnding, setShowSessionEnding] = useState(false);
-  const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
-  const [showEndPrompt, setShowEndPrompt] = useState(false);
-  const [savedStoriesCount, setSavedStoriesCount] = useState(0);
-  const [warmLoadingMessage, setWarmLoadingMessage] = useState('');
-  // Hybrid approach: Web Speech API is primary (free), Whisper is backup
-  // Will auto-switch to Whisper if Web Speech API isn't supported
-  const [useWhisperFallback, setUseWhisperFallback] = useState(false);
+  // === Extracted hooks ===
+  const conversation = useConversation();
+  const tts = useTTSPlayback();
+  const story = useStoryPersistence();
 
-  // Voice introduction state
+  // === Page-level state ===
+  const [inputText, setInputText] = useState('');
   const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
   const [isPlayingIntro, setIsPlayingIntro] = useState(false);
+  const [showEndPrompt, setShowEndPrompt] = useState(false);
+  const [showInactivityPrompt, setShowInactivityPrompt] = useState(false);
+  const [useWhisperFallback, setUseWhisperFallback] = useState(false);
+  const [hasPlayedDraftRecoveryVoice, setHasPlayedDraftRecoveryVoice] = useState(false);
+  const [isPlayingDraftRecoveryVoice, setIsPlayingDraftRecoveryVoice] = useState(false);
 
-  // Personalization state
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [userContext, setUserContext] = useState<{
-    isReturningUser: boolean;
-    frequentlyMentionedPeople: string[];
-    preferredTimeframes: string[];
-    commonThemes: string[];
-  }>({
-    isReturningUser: false,
-    frequentlyMentionedPeople: [],
-    preferredTimeframes: [],
-    commonThemes: []
-  });
-  const [starterPrompt, setStarterPrompt] = useState('');
-
+  // === Refs ===
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const idleNudgeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoResumeRef = useRef(false);
   const introPlayedRef = useRef(false);
   const sendMessageRef = useRef<(content: string) => void>(() => {});
+  const transcriptRef = useRef('');
+  const messagesLengthRef = useRef(0);
 
-  // State for draft recovery prompt
-  const [showDraftRecovery, setShowDraftRecovery] = useState(false);
-  const [recoveredDraft, setRecoveredDraft] = useState<{ messages: Message[]; savedAt: Date } | null>(null);
-  const [hasPlayedDraftRecoveryVoice, setHasPlayedDraftRecoveryVoice] = useState(false);
-  const [isPlayingDraftRecoveryVoice, setIsPlayingDraftRecoveryVoice] = useState(false);
-  const draftRecoveryAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Load user data on mount
+  // === Init on mount ===
   useEffect(() => {
-    // Check if intro was already played this session
     const introPlayed = sessionStorage.getItem('embers_intro_played');
     if (introPlayed) {
       setHasPlayedIntro(true);
       introPlayedRef.current = true;
     }
 
-    // Load name
-    const storedName = localStorage.getItem('embers_user_name');
-    if (storedName) setUserName(storedName);
-
-    // Load selected interests
-    const interests = interestService.get();
-    setSelectedInterests(interests);
-
-    // Load user context (returning user, mentioned people, themes)
-    const context = userStyleService.getContext();
-    setUserContext(context);
-
-    // Generate personalized starter prompt for display
-    let prompt: string;
-    if (interests.length > 0) {
-      const matchingPrompts = getPromptsForInterests(interests);
-      const randomPrompt = matchingPrompts[Math.floor(Math.random() * matchingPrompts.length)];
-      prompt = randomPrompt.question;
-    } else {
-      prompt = getRandomWarmPrompt().question;
-    }
-    setStarterPrompt(prompt);
-
-    // Fetch stories count
-    const fetchStoriesCount = async () => {
-      try {
-        const response = await fetch('/api/stories');
-        if (response.ok) {
-          const data = await response.json();
-          setSavedStoriesCount(data.stories?.length || 0);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchStoriesCount();
-
-    // Check if Web Speech API is supported - if not, use Whisper fallback
     const SpeechRecognition =
       typeof window !== 'undefined' &&
       (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SpeechRecognition) {
-      setUseWhisperFallback(true);
-    }
+    if (!SpeechRecognition) setUseWhisperFallback(true);
+  }, []);
 
-    // Check for recovered draft (inline to avoid dependency issues)
-    try {
-      const draftStr = localStorage.getItem('embers_conversation_draft');
-      if (draftStr) {
-        const draft = JSON.parse(draftStr);
-        if (draft.messages && draft.messages.length >= 2) {
-          setRecoveredDraft({
-            messages: draft.messages,
-            savedAt: new Date(draft.savedAt),
-          });
-          setShowDraftRecovery(true);
-        }
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      tts.stopAllAudio();
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (idleNudgeTimerRef.current) clearTimeout(idleNudgeTimerRef.current);
+    };
+  }, [tts.stopAllAudio]);
+
+  // === Timers ===
+  const startIdleNudgeTimer = useCallback(() => {
+    if (idleNudgeTimerRef.current) clearTimeout(idleNudgeTimerRef.current);
+    idleNudgeTimerRef.current = setTimeout(() => {
+      if (!tts.isSpeakingRef.current) {
+        playVoicePrompt("I'm still here, take your time. Whenever you're ready, just start talking.", false);
       }
-    } catch { /* ignore invalid drafts */ }
+    }, 15000);
+  }, [tts.isSpeakingRef]);
+
+  const clearIdleNudgeTimer = useCallback(() => {
+    if (idleNudgeTimerRef.current) {
+      clearTimeout(idleNudgeTimerRef.current);
+      idleNudgeTimerRef.current = null;
+    }
   }, []);
 
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     setShowInactivityPrompt(false);
     inactivityTimerRef.current = setTimeout(() => {
-      if (messages.length >= 2) setShowInactivityPrompt(true);
+      if (conversation.messages.length >= 2) setShowInactivityPrompt(true);
     }, INACTIVITY_TIMEOUT);
-  }, [messages.length]);
+  }, [conversation.messages.length]);
 
-  // Refs for silence callback (to avoid stale closures)
-  const transcriptRef = useRef('');
-  const messagesLengthRef = useRef(0);
-
+  // === Speech recognition ===
   const handleSilence = useCallback(() => {
     const currentTranscript = transcriptRef.current;
-    if (currentTranscript && !isProcessing) {
-      // Check for voice commands first
+    if (currentTranscript && !conversation.isProcessing) {
       const voiceCommand = detectVoiceCommand(currentTranscript);
       if (voiceCommand === 'save' || voiceCommand === 'done' || voiceCommand === 'goodbye') {
-        // Don't send as message, handle as command
-        if (messagesLengthRef.current >= 2) {
-          setShowEndPrompt(true);
-        }
+        if (messagesLengthRef.current >= 2) setShowEndPrompt(true);
         return;
       }
-
       if (detectEndPhrase(currentTranscript)) setShowEndPrompt(true);
       sendMessageRef.current(currentTranscript);
     }
-  }, [isProcessing]);
+  }, [conversation.isProcessing]);
 
   const {
     isListening, transcript, interimTranscript, error: speechError,
@@ -292,7 +174,6 @@ export default function ConversationPage() {
     startListening, stopListening, resetTranscript,
   } = useSpeechRecognition({ onSilence: handleSilence, silenceTimeout: 5000 });
 
-  // Voice commands for draft recovery modal
   const {
     isListening: isDraftRecoveryListening,
     transcript: draftRecoveryTranscript,
@@ -303,19 +184,14 @@ export default function ConversationPage() {
     isAffirmative,
   } = useVoiceCommands({
     continuous: false,
-    enabled: showDraftRecovery && !isPlayingDraftRecoveryVoice,
+    enabled: story.showDraftRecovery && !isPlayingDraftRecoveryVoice,
   });
 
-  // Keep refs in sync for the silence callback
-  useEffect(() => {
-    transcriptRef.current = transcript;
-  }, [transcript]);
+  // Keep refs in sync for silence callback
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { messagesLengthRef.current = conversation.messages.length; }, [conversation.messages.length]);
 
-  useEffect(() => {
-    messagesLengthRef.current = messages.length;
-  }, [messages.length]);
-
-  // Reliable audio recorder (continuous recording with Whisper transcription)
+  // Audio recorder (Whisper fallback)
   const handleTranscriptionComplete = useCallback((text: string) => {
     if (text.trim()) {
       if (detectEndPhrase(text)) setShowEndPrompt(true);
@@ -324,403 +200,238 @@ export default function ConversationPage() {
   }, []);
 
   const {
-    isRecording,
-    isTranscribing,
-    formattedDuration,
-    error: recorderError,
-    startRecording,
-    stopRecording,
-    cancelRecording,
+    isRecording, isTranscribing, formattedDuration,
+    error: recorderError, startRecording, stopRecording,
   } = useAudioRecorder({
     onTranscriptionComplete: handleTranscriptionComplete,
-    onError: (err) => setError(err),
+    onError: (err) => conversation.setError(err),
   });
 
-  // Continuous session recorder - records entire conversation for archival
+  // Continuous session recorder
   const {
     isRecording: isSessionRecording,
     duration: sessionDuration,
-    formattedDuration: sessionFormattedDuration,
-    startRecording: startSessionRecording,
     stopRecording: stopSessionRecording,
-    pauseRecording: pauseSessionRecording,
-    resumeRecording: resumeSessionRecording,
   } = useContinuousRecorder({
     onError: (err) => console.error('Session recording error:', err),
   });
 
-  // Start session recording when conversation begins
-  const sessionRecordingStartedRef = useRef(false);
+  // === Voice playback helpers ===
+  const resumeListeningAfterPlayback = useCallback(() => {
+    setTimeout(() => {
+      if (useWhisperFallback) {
+        startRecording();
+      } else if (isSupported) {
+        startListening();
+      }
+    }, 600);
+  }, [useWhisperFallback, isSupported, startRecording, startListening]);
 
-  // Play voice prompt (for silence detection callbacks)
-  const playVoicePrompt = useCallback(async (text: string) => {
-    // Don't interrupt if already speaking or processing
-    if (isSpeaking || isProcessing) return;
+  const playVoicePrompt = useCallback(async (text: string, addAsMessage = true) => {
+    if (tts.isSpeakingRef.current || conversation.isProcessing) return;
 
-    try {
-      setIsSpeaking(true);
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
-
-      if (!response.ok) throw new Error('TTS failed');
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      if (audioRef.current) audioRef.current.pause();
-
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      // Add as assistant message so user sees what Ember said
-      const promptMessage: Message = {
+    if (addAsMessage) {
+      conversation.setMessages(prev => [...prev, {
         id: 'prompt-' + Date.now(),
-        role: 'assistant',
+        role: 'assistant' as const,
         content: text,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, promptMessage]);
+        timestamp: new Date(),
+      }]);
+    }
 
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        // Resume listening after prompt
+    await tts.playText(text, {
+      onEnd: () => {
         if (isSupported && !useWhisperFallback) {
           setTimeout(() => startListening(), 600);
         }
-      };
+      },
+    });
+  }, [tts, conversation.isProcessing, isSupported, useWhisperFallback, startListening]);
 
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-
-      await audio.play();
-    } catch {
-      setIsSpeaking(false);
-    }
-  }, [isSpeaking, isProcessing, isSupported, useWhisperFallback, startListening]);
-
-  // Handle auto-save from silence detection
+  // === Auto-save hook ===
   const handleAutoSave = useCallback(async () => {
-    if (messages.length < 2) return;
-
-    // Save draft to localStorage (Supabase save happens in handleSaveStory)
+    if (conversation.messages.length < 2) return;
     const draft = {
       id: `draft-${Date.now()}`,
-      messages,
+      messages: conversation.messages,
       savedAt: new Date().toISOString(),
       userName: localStorage.getItem('embers_user_name') || '',
     };
     localStorage.setItem('embers_conversation_draft', JSON.stringify(draft));
-  }, [messages]);
+  }, [conversation.messages]);
 
-  // Voice-guided auto-save hook
   const {
-    silenceStage: voiceSilenceStage,
-    silenceDuration: voiceSilenceDuration,
-    autoSaveState,
-    resetSilence,
-    startSilenceTracking,
-    stopSilenceTracking,
-    loadDraft,
-    clearDraft,
-  } = useVoiceGuidedAutoSave(messages, {
+    resetSilence, startSilenceTracking, stopSilenceTracking, clearDraft,
+  } = useVoiceGuidedAutoSave(conversation.messages, {
     onPlayVoice: playVoicePrompt,
     onAutoSave: handleAutoSave,
-    enabled: messages.length >= 2 && !isSpeaking && !isProcessing,
+    enabled: conversation.messages.length >= 2 && !tts.isSpeaking && !conversation.isProcessing,
   });
 
-  useEffect(() => {
-    if (recorderError) setError(recorderError);
-  }, [recorderError]);
+  // === Error sync ===
+  useEffect(() => { if (recorderError) conversation.setError(recorderError); }, [recorderError]);
+  useEffect(() => { if (speechError) conversation.setError(speechError); }, [speechError]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // Auto-scroll messages
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation.messages]);
 
-  useEffect(() => {
-    if (speechError) setError(speechError);
-  }, [speechError]);
-
+  // Reset inactivity timer on activity
   useEffect(() => {
     resetInactivityTimer();
     return () => { if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current); };
-  }, [messages, isListening, resetInactivityTimer]);
+  }, [conversation.messages, isListening, resetInactivityTimer]);
 
-  // Name detection from conversation
-  useEffect(() => {
-    if (messages.length >= 2) {
-      const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
-      const prevMsg = messages[messages.length - 2];
-      if (prevMsg?.role === 'assistant' && prevMsg.content.toLowerCase().includes('name') && lastUserMessage?.role === 'user') {
-        const match = lastUserMessage.content.match(/(?:i'm|i am|my name is|call me)\s+(\w+)/i) || lastUserMessage.content.match(/^(\w+)$/i);
-        if (match?.[1]) {
-          const name = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
-          setUserName(name);
-          localStorage.setItem('embers_user_name', name);
-        }
-      }
-    }
-  }, [messages]);
-
-  // Play voice prompt for draft recovery
-  const playDraftRecoveryVoice = useCallback(async () => {
-    if (hasPlayedDraftRecoveryVoice || isPlayingDraftRecoveryVoice) return;
-
-    setIsPlayingDraftRecoveryVoice(true);
-    setHasPlayedDraftRecoveryVoice(true);
-
-    const prompt = `Welcome back. You have an unsaved conversation from earlier. Say "continue" to pick up where you left off, or say "start fresh" to begin a new conversation.`;
-
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: prompt })
-      });
-
-      if (!response.ok) throw new Error('TTS failed');
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      if (draftRecoveryAudioRef.current) draftRecoveryAudioRef.current.pause();
-
-      const audio = new Audio(audioUrl);
-      draftRecoveryAudioRef.current = audio;
-
-      audio.onended = () => {
-        setIsPlayingDraftRecoveryVoice(false);
-        URL.revokeObjectURL(audioUrl);
-        // Start listening for voice commands
-        if (isDraftRecoverySupported) {
-          setTimeout(() => {
-            resetDraftRecoveryTranscript();
-            startDraftRecoveryListening();
-          }, 500);
-        }
-      };
-
-      audio.onerror = () => {
-        setIsPlayingDraftRecoveryVoice(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-
-      await audio.play();
-    } catch {
-      setIsPlayingDraftRecoveryVoice(false);
-    }
-  }, [hasPlayedDraftRecoveryVoice, isPlayingDraftRecoveryVoice, isDraftRecoverySupported, resetDraftRecoveryTranscript, startDraftRecoveryListening]);
-
-  // Play draft recovery voice when modal shows
-  useEffect(() => {
-    if (showDraftRecovery && recoveredDraft && !hasPlayedDraftRecoveryVoice) {
-      // Small delay to let the modal render
-      const timer = setTimeout(() => {
-        playDraftRecoveryVoice();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [showDraftRecovery, recoveredDraft, hasPlayedDraftRecoveryVoice, playDraftRecoveryVoice]);
-
-  // Play voice introduction
-  const playVoiceIntroduction = async () => {
-    if (introPlayedRef.current || isPlayingIntro) return;
+  // === Voice introduction ===
+  const playVoiceIntroduction = useCallback(async () => {
+    if (introPlayedRef.current || isPlayingIntro || tts.isSpeakingRef.current) return;
 
     setIsPlayingIntro(true);
     introPlayedRef.current = true;
+    tts.stopAllAudio();
 
-    const { greeting, question } = generateVoiceIntroduction(
-      userName,
-      userContext.isReturningUser,
-      userContext.frequentlyMentionedPeople,
-      userContext.commonThemes
-    );
+    const cameFromOnboarding = sessionStorage.getItem('embers_came_from_onboarding');
+    sessionStorage.removeItem('embers_came_from_onboarding');
 
-    const fullIntroduction = `${greeting}\n\n${question}`;
+    let fullIntroduction: string;
 
-    // Add intro as first assistant message
-    const introMessage: Message = {
+    if (cameFromOnboarding) {
+      const question = OPENING_QUESTIONS[Math.floor(Math.random() * OPENING_QUESTIONS.length)];
+      fullIntroduction = conversation.userName
+        ? `Alright ${conversation.userName}, I'm ready to listen. ${question}`
+        : `Alright, I'm ready to listen. ${question}`;
+    } else {
+      const { greeting, question } = generateVoiceIntroduction(
+        conversation.userName,
+        conversation.userContext.isReturningUser,
+        conversation.userContext.frequentlyMentionedPeople,
+        conversation.userContext.commonThemes
+      );
+      fullIntroduction = `${greeting}\n\n${question}`;
+    }
+
+    // Add intro as first message
+    conversation.setMessages([{
       id: 'intro-' + Date.now(),
       role: 'assistant',
       content: fullIntroduction,
-      timestamp: new Date()
-    };
-    setMessages([introMessage]);
+      timestamp: new Date(),
+    }]);
 
-    // Play the audio
-    try {
-      setIsSpeaking(true);
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fullIntroduction })
-      });
-
-      if (!response.ok) throw new Error('TTS failed');
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      if (audioRef.current) audioRef.current.pause();
-
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        setIsSpeaking(false);
-        setIsPlayingIntro(false);
-        setHasPlayedIntro(true);
-        sessionStorage.setItem('embers_intro_played', 'true');
-        URL.revokeObjectURL(audioUrl);
-
-        // Automatically start listening after intro finishes
-        if (isSupported) {
-          setTimeout(() => startListening(), 600);
-        }
-      };
-
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        setIsPlayingIntro(false);
-        setHasPlayedIntro(true);
-        sessionStorage.setItem('embers_intro_played', 'true');
-        URL.revokeObjectURL(audioUrl);
-
-        // Still try to start listening
-        if (isSupported) {
-          setTimeout(() => startListening(), 600);
-        }
-      };
-
-      await audio.play();
-    } catch {
-      setIsSpeaking(false);
+    const markIntroDone = () => {
       setIsPlayingIntro(false);
       setHasPlayedIntro(true);
       sessionStorage.setItem('embers_intro_played', 'true');
+    };
 
-      // Start listening even if TTS failed
-      if (isSupported) {
-        setTimeout(() => startListening(), 600);
+    await tts.playText(fullIntroduction, {
+      onEnd: () => {
+        markIntroDone();
+        startIdleNudgeTimer();
+        if (isSupported) setTimeout(() => startListening(), 600);
+      },
+      onError: () => {
+        markIntroDone();
+        if (isSupported) setTimeout(() => startListening(), 600);
+      },
+    });
+  }, [isPlayingIntro, tts, conversation, isSupported, startListening, startIdleNudgeTimer]);
+
+  // Auto-start voice intro from onboarding
+  useEffect(() => {
+    const autoStart = sessionStorage.getItem('embers_auto_start_conversation');
+    if (!autoStart || hasPlayedIntro || introPlayedRef.current) return;
+
+    // Check for draft — let draft recovery handle it if present
+    try {
+      const draftStr = localStorage.getItem('embers_conversation_draft');
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft.messages && draft.messages.length >= 2) return;
       }
+    } catch (err) {
+      console.warn('[Conversation] Could not check for draft during auto-start:', err);
     }
-  };
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim() || isProcessing) return;
-    setError(null);
-    setIsProcessing(true);
+    sessionStorage.removeItem('embers_auto_start_conversation');
+    const timer = setTimeout(() => playVoiceIntroduction(), 800);
+    return () => clearTimeout(timer);
+  }, [hasPlayedIntro, playVoiceIntroduction]);
+
+  // === Draft recovery voice ===
+  const playDraftRecoveryVoice = useCallback(async () => {
+    if (hasPlayedDraftRecoveryVoice || isPlayingDraftRecoveryVoice || tts.isSpeakingRef.current) return;
+
+    setIsPlayingDraftRecoveryVoice(true);
+    setHasPlayedDraftRecoveryVoice(true);
+    tts.stopAllAudio();
+
+    const prompt = `Welcome back. You have an unsaved conversation from earlier. Say "continue" to pick up where you left off, or say "start fresh" to begin a new conversation.`;
+
+    await tts.playText(prompt, {
+      onEnd: () => {
+        setIsPlayingDraftRecoveryVoice(false);
+        if (isDraftRecoverySupported) {
+          setTimeout(() => { resetDraftRecoveryTranscript(); startDraftRecoveryListening(); }, 500);
+        }
+      },
+      onError: () => { setIsPlayingDraftRecoveryVoice(false); },
+    });
+  }, [hasPlayedDraftRecoveryVoice, isPlayingDraftRecoveryVoice, tts, isDraftRecoverySupported, resetDraftRecoveryTranscript, startDraftRecoveryListening]);
+
+  useEffect(() => {
+    if (story.showDraftRecovery && story.recoveredDraft && !hasPlayedDraftRecoveryVoice) {
+      const timer = setTimeout(() => playDraftRecoveryVoice(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [story.showDraftRecovery, story.recoveredDraft, hasPlayedDraftRecoveryVoice, playDraftRecoveryVoice]);
+
+  // === Core handlers ===
+  const handleSendMessage = useCallback(async (content: string) => {
+    if (!content.trim() || conversation.isProcessing) return;
+
     resetInactivityTimer();
-
-    // Process the message through style analyzer
-    const updatedStyle = userStyleService.processMessage(content);
-
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: content.trim(), timestamp: new Date() };
-    setMessages(prev => [...prev, userMessage]);
+    clearIdleNudgeTimer();
+    conversation.setError(null);
     setInputText('');
 
-    try {
-      // Send with full context for personalization
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          userName,
-          isFirstMessage: messages.filter(m => m.role === 'user').length === 0,
-          selectedInterests,
-          isReturningUser: userContext.isReturningUser,
-          frequentlyMentionedPeople: updatedStyle.frequentlyMentionedPeople,
-          preferredTimeframes: updatedStyle.preferredTimeframes,
-          commonThemes: Object.keys(updatedStyle.commonThemes).slice(0, 5)
-        }),
-      });
-      if (!response.ok) throw new Error('Failed');
-      const data = await response.json();
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: data.message, timestamp: new Date() }]);
+    const response = await conversation.sendMessage(content);
+    if (response) {
       shouldAutoResumeRef.current = true;
-      await playAudio(data.message);
-    } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setIsProcessing(false);
+      await tts.playText(response, {
+        onEnd: () => {
+          startIdleNudgeTimer();
+          if (shouldAutoResumeRef.current) {
+            shouldAutoResumeRef.current = false;
+            resumeListeningAfterPlayback();
+            startSilenceTracking();
+          }
+        },
+        onError: () => {
+          if (shouldAutoResumeRef.current) {
+            shouldAutoResumeRef.current = false;
+            resumeListeningAfterPlayback();
+          }
+        },
+      });
     }
-  };
+  }, [conversation, tts, resetInactivityTimer, clearIdleNudgeTimer, startIdleNudgeTimer, resumeListeningAfterPlayback, startSilenceTracking]);
 
   // Keep ref updated for audio recorder callback
-  useEffect(() => {
-    sendMessageRef.current = handleSendMessage;
-  });
+  useEffect(() => { sendMessageRef.current = handleSendMessage; });
 
-  const playAudio = async (text: string) => {
-    try {
-      setIsLoadingTTS(true);
-      setWarmLoadingMessage(getRandomWarmMessage());
-      const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-      if (!response.ok) throw new Error('TTS failed');
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      if (audioRef.current) audioRef.current.pause();
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      setIsLoadingTTS(false);
-      setWarmLoadingMessage('');
-      setIsSpeaking(true);
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        // Auto-start recording after Ember finishes speaking
-        if (shouldAutoResumeRef.current) {
-          shouldAutoResumeRef.current = false;
-          setTimeout(() => {
-            if (useWhisperFallback) {
-              startRecording();
-            } else if (isSupported) {
-              startListening();
-            }
-            // Start silence tracking - user might not respond
-            startSilenceTracking();
-          }, 600);
-        }
-      };
-      audio.onerror = () => { setIsSpeaking(false); setIsLoadingTTS(false); setWarmLoadingMessage(''); URL.revokeObjectURL(audioUrl); };
-      await audio.play();
-    } catch {
-      setIsSpeaking(false);
-      setIsLoadingTTS(false);
-      setWarmLoadingMessage('');
-      if (shouldAutoResumeRef.current) {
-        shouldAutoResumeRef.current = false;
-        setTimeout(() => {
-          if (useWhisperFallback) {
-            startRecording();
-          } else if (isSupported) {
-            startListening();
-          }
-        }, 600);
-      }
-    }
-  };
+  const handleFireClick = useCallback(() => {
+    if (tts.isSpeaking || conversation.isProcessing || isPlayingIntro || tts.isLoadingTTS || isTranscribing) return;
 
-  const handleFireClick = () => {
-    if (isSpeaking || isProcessing || isPlayingIntro || isLoadingTTS || isTranscribing) return;
-
-    // If this is the first interaction and intro hasn't played, play it
-    if (messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {
+    // First interaction: play intro
+    if (conversation.messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {
       playVoiceIntroduction();
       return;
     }
 
-    // Reset silence tracking when user starts interacting
     resetSilence();
     stopSilenceTracking();
 
-    // Primary: Web Speech API (free, robust with auto-restart)
+    // Web Speech API (primary)
     if (!useWhisperFallback) {
       if (isListening) {
         stopListening();
@@ -732,193 +443,117 @@ export default function ConversationPage() {
       return;
     }
 
-    // Fallback: Whisper transcription (when Web Speech API not supported)
+    // Whisper fallback
     if (isRecording) {
-      stopRecording(); // Will transcribe and send automatically
+      stopRecording();
     } else {
       startRecording();
     }
-  };
+  }, [tts, conversation, isPlayingIntro, isTranscribing, hasPlayedIntro, useWhisperFallback,
+      isListening, isRecording, transcript, playVoiceIntroduction, resetSilence, stopSilenceTracking,
+      stopListening, startListening, resetTranscript, handleSendMessage, stopRecording, startRecording]);
 
-  const handleTextSubmit = (e: React.FormEvent) => {
+  const handleTextSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (inputText.trim()) {
-      // If intro hasn't played yet, mark it as played since user is typing
-      if (!hasPlayedIntro) {
-        setHasPlayedIntro(true);
-        sessionStorage.setItem('embers_intro_played', 'true');
-        introPlayedRef.current = true;
-      }
-      if (detectEndPhrase(inputText)) setShowEndPrompt(true);
-      handleSendMessage(inputText);
-    }
-  };
+    if (!inputText.trim()) return;
 
-  const handleSaveStory = async () => {
-    if (messages.length < 2) { setError('Have a conversation first.'); return; }
-    setIsSaving(true);
-    setError(null);
+    if (!hasPlayedIntro) {
+      setHasPlayedIntro(true);
+      sessionStorage.setItem('embers_intro_played', 'true');
+      introPlayedRef.current = true;
+    }
+    if (detectEndPhrase(inputText)) setShowEndPrompt(true);
+    handleSendMessage(inputText);
+  }, [inputText, hasPlayedIntro, handleSendMessage]);
+
+  const handleSaveStory = useCallback(async () => {
+    if (conversation.messages.length < 2) {
+      conversation.setError('Have a conversation first.');
+      return;
+    }
+
+    conversation.setError(null);
     setShowEndPrompt(false);
     setShowInactivityPrompt(false);
     stopListening();
     stopSilenceTracking();
-    if (audioRef.current) audioRef.current.pause();
+    tts.stopAllAudio();
 
     try {
-      // Get raw transcript (all user messages combined)
-      const rawTranscript = messages
-        .filter(m => m.role === 'user')
-        .map(m => m.content)
-        .join('\n\n');
-
-      // Save the story with conversation messages
-      const response = await fetch('/api/stories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: rawTranscript,
-          messages,
-          generateNarrative: true,
-          generateTitle: true,
-          rawTranscript,
-          conversationMessages: messages,
-        }),
+      await story.saveStory(conversation.messages, {
+        stopSessionRecording: stopSessionRecording,
+        sessionDuration,
+        isSessionRecording,
       });
-      if (!response.ok) throw new Error('Failed to save');
-      const data = await response.json();
-      const storyId = data.story.id;
-
-      // Stop session recording and upload audio
-      if (isSessionRecording) {
-        try {
-          const audioBlob = await stopSessionRecording();
-          if (audioBlob && audioBlob.size > 0) {
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'conversation.webm');
-            formData.append('storyId', storyId);
-            formData.append('duration', sessionDuration.toString());
-
-            await fetch('/api/audio/upload', {
-              method: 'POST',
-              body: formData,
-            });
-          }
-        } catch (audioErr) {
-          console.error('Failed to upload audio:', audioErr);
-          // Don't fail the whole save if audio upload fails
-        }
-      }
-
-      setSavedStoryId(storyId);
-      setSavedStoryTitle(data.story.title || null);
-      setSavedStoriesCount(prev => prev + 1);
-      clearDraft(); // Clear draft after successful save
-
-      // Generate summary of what was shared
-      const summary = generateConversationSummary(messages);
-      setConversationSummary(summary);
-
-      // Record the story in session data
-      const style = userStyleService.getStyle();
-      userStyleService.recordStory(Object.keys(style.commonThemes));
-
-      setShowSessionEnding(true);
+      clearDraft();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save story.');
-    } finally {
-      setIsSaving(false);
+      conversation.setError(err instanceof Error ? err.message : 'Failed to save story.');
     }
-  };
+  }, [conversation, story, tts, stopListening, stopSilenceTracking, clearDraft,
+      stopSessionRecording, sessionDuration, isSessionRecording]);
 
-  const handleNewConversation = () => {
-    setMessages([]);
-    setSavedStoryId(null);
-    setError(null);
-    setShowSessionEnding(false);
+  const handleNewConversation = useCallback(() => {
+    conversation.resetConversation();
+    story.resetStoryState();
     setShowEndPrompt(false);
     setHasPlayedIntro(false);
     introPlayedRef.current = false;
     sessionStorage.removeItem('embers_intro_played');
-    clearDraft(); // Clear any saved draft
+    clearDraft();
     stopSilenceTracking();
     resetSilence();
+  }, [conversation, story, clearDraft, stopSilenceTracking, resetSilence]);
 
-    // Generate a new starter prompt
-    const interests = interestService.get();
-    let prompt: string;
-    if (interests.length > 0) {
-      const matchingPrompts = getPromptsForInterests(interests);
-      const randomPrompt = matchingPrompts[Math.floor(Math.random() * matchingPrompts.length)];
-      prompt = randomPrompt.question;
-    } else {
-      prompt = getRandomWarmPrompt().question;
-    }
-    setStarterPrompt(prompt);
-  };
-
-  // Handle recovering a draft
+  // Draft recovery handlers
   const handleRecoverDraft = useCallback(() => {
-    if (recoveredDraft) {
-      setMessages(recoveredDraft.messages);
+    const messages = story.recoverDraft();
+    if (messages) {
+      conversation.setMessages(messages);
       setHasPlayedIntro(true);
       introPlayedRef.current = true;
       sessionStorage.setItem('embers_intro_played', 'true');
     }
-    setShowDraftRecovery(false);
-    // Stop any draft recovery audio
-    if (draftRecoveryAudioRef.current) {
-      draftRecoveryAudioRef.current.pause();
-    }
-  }, [recoveredDraft]);
+    tts.stopAllAudio();
+  }, [story, conversation, tts]);
 
-  // Handle discarding a draft
   const handleDiscardDraft = useCallback(() => {
     clearDraft();
-    setShowDraftRecovery(false);
-    setRecoveredDraft(null);
-    // Stop any draft recovery audio
-    if (draftRecoveryAudioRef.current) {
-      draftRecoveryAudioRef.current.pause();
-    }
-  }, [clearDraft]);
+    story.discardDraft();
+    tts.stopAllAudio();
+  }, [clearDraft, story, tts]);
 
   // Process draft recovery voice commands
   useEffect(() => {
-    if (!draftRecoveryTranscript || isPlayingDraftRecoveryVoice || !showDraftRecovery) return;
+    if (!draftRecoveryTranscript || isPlayingDraftRecoveryVoice || !story.showDraftRecovery) return;
+    const lower = draftRecoveryTranscript.toLowerCase().trim();
 
-    const lowerTranscript = draftRecoveryTranscript.toLowerCase().trim();
-
-    // Check for "continue" command
-    if (lowerTranscript.includes('continue') || isAffirmative(lowerTranscript)) {
+    if (lower.includes('continue') || isAffirmative(lower)) {
       stopDraftRecoveryListening();
       handleRecoverDraft();
-      return;
-    }
-
-    // Check for "start fresh" command
-    if (lowerTranscript.includes('start fresh') || lowerTranscript.includes('fresh') ||
-        lowerTranscript.includes('new') || lowerTranscript.includes('no')) {
+    } else if (lower.includes('start fresh') || lower.includes('fresh') || lower.includes('new') || lower.includes('no')) {
       stopDraftRecoveryListening();
       handleDiscardDraft();
-      return;
     }
-  }, [draftRecoveryTranscript, isPlayingDraftRecoveryVoice, showDraftRecovery, isAffirmative, stopDraftRecoveryListening, handleRecoverDraft, handleDiscardDraft]);
+  }, [draftRecoveryTranscript, isPlayingDraftRecoveryVoice, story.showDraftRecovery,
+      isAffirmative, stopDraftRecoveryListening, handleRecoverDraft, handleDiscardDraft]);
 
-  if (showSessionEnding) {
+  // === Session ending ===
+  if (story.showSessionEnding) {
     const style = userStyleService.getStyle();
     return (
       <SessionEnding
-        userName={userName}
-        storyId={savedStoryId || undefined}
-        storyTitle={savedStoryTitle || undefined}
+        userName={conversation.userName}
+        storyId={story.savedStoryId || undefined}
+        storyTitle={story.savedStoryTitle || undefined}
         mentionedPeople={style.frequentlyMentionedPeople}
         themes={Object.keys(style.commonThemes).slice(0, 5)}
-        conversationSummary={conversationSummary || undefined}
+        conversationSummary={story.conversationSummary || undefined}
         onNewStory={handleNewConversation}
       />
     );
   }
 
+  // === JSX ===
   const hasActiveInput = transcript || interimTranscript;
 
   return (
@@ -929,8 +564,8 @@ export default function ConversationPage() {
           className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[70%]"
           style={{
             background: `radial-gradient(ellipse at center bottom,
-              rgba(232, 109, 72, ${isListening ? 0.15 : isSpeaking ? 0.12 : 0.08}) 0%,
-              rgba(196, 90, 58, ${isListening ? 0.08 : isSpeaking ? 0.06 : 0.04}) 30%,
+              rgba(232, 109, 72, ${isListening ? 0.15 : tts.isSpeaking ? 0.12 : 0.08}) 0%,
+              rgba(196, 90, 58, ${isListening ? 0.08 : tts.isSpeaking ? 0.06 : 0.04}) 30%,
               transparent 60%)`,
             transition: 'all 1s ease-out',
           }}
@@ -938,63 +573,49 @@ export default function ConversationPage() {
       </div>
 
       {/* Inactivity prompt */}
-      <InactivityPrompt isVisible={showInactivityPrompt} onContinue={() => { setShowInactivityPrompt(false); resetInactivityTimer(); }} onSaveAndExit={handleSaveStory} />
+      <InactivityPrompt
+        isVisible={showInactivityPrompt}
+        onContinue={() => { setShowInactivityPrompt(false); resetInactivityTimer(); }}
+        onSaveAndExit={handleSaveStory}
+      />
 
-      {/* Draft recovery prompt - Voice Activated */}
-      {showDraftRecovery && recoveredDraft && (
+      {/* Draft recovery prompt */}
+      {story.showDraftRecovery && story.recoveredDraft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-[#0a0908]/90 backdrop-blur-sm" />
           <div className="relative bg-[#151312] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center">
-            {/* Listening indicator */}
             {isDraftRecoveryListening && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-4 py-1 flex items-center gap-2">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                 <span className="text-[#f9f7f2]/80 text-xs">Listening...</span>
               </div>
             )}
-
-            {/* Speaking indicator */}
             {isPlayingDraftRecoveryVoice && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-4 py-1">
-                <span className="text-[#f9f7f2]/80 text-xs animate-pulse">Ember is speaking...</span>
+                <span className="text-[#f9f7f2]/80 text-xs animate-pulse">Embers is speaking...</span>
               </div>
             )}
-
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Welcome back</h3>
-            <p className="text-sm text-[#f9f7f2]/50 mb-2">
-              You have an unsaved conversation from earlier.
-            </p>
+            <p className="text-sm text-[#f9f7f2]/50 mb-2">You have an unsaved conversation from earlier.</p>
             <p className="text-xs text-[#f9f7f2]/30 mb-3">
-              Saved {new Date(recoveredDraft.savedAt).toLocaleString()}
+              Saved {new Date(story.recoveredDraft.savedAt).toLocaleString()}
             </p>
-
-            {/* Voice instruction */}
             <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-3 mb-4">
               <p className="text-[#f9f7f2]/70 text-sm">
                 Say <span className="text-[#E86D48] font-semibold">&ldquo;continue&rdquo;</span> or{' '}
                 <span className="text-[#E86D48] font-semibold">&ldquo;start fresh&rdquo;</span>
               </p>
             </div>
-
-            {/* Live transcript */}
             {isDraftRecoveryListening && draftRecoveryTranscript && (
               <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 mb-4">
                 <p className="text-[#f9f7f2]/60 text-sm">&ldquo;{draftRecoveryTranscript}&rdquo;</p>
               </div>
             )}
-
             <div className="flex gap-3">
-              <button
-                onClick={handleDiscardDraft}
-                className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm"
-              >
+              <button onClick={handleDiscardDraft} className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm">
                 Start Fresh
               </button>
-              <button
-                onClick={handleRecoverDraft}
-                className="flex-1 py-3 rounded-full text-white text-sm"
-                style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-              >
+              <button onClick={handleRecoverDraft} className="flex-1 py-3 rounded-full text-white text-sm" style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}>
                 Continue
               </button>
             </div>
@@ -1003,32 +624,30 @@ export default function ConversationPage() {
       )}
 
       {/* End prompt */}
-      {showEndPrompt && messages.length >= 2 && (
+      {showEndPrompt && conversation.messages.length >= 2 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-[#0a0908]/90 backdrop-blur-sm" />
           <div className="relative bg-[#151312] border border-white/10 rounded-2xl p-8 max-w-sm mx-4 text-center">
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Save your story?</h3>
-            <p className="text-sm text-[#f9f7f2]/50 mb-4">
-              Thank you for sharing. Would you like to preserve this memory?
-            </p>
+            <p className="text-sm text-[#f9f7f2]/50 mb-4">Thank you for sharing. Would you like to preserve this memory?</p>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowEndPrompt(false)} className="flex-1 py-3 rounded-full text-[#f9f7f2]/60 border border-white/10 hover:bg-white/5 text-sm">Keep Going</button>
-              <button onClick={handleSaveStory} disabled={isSaving} className="flex-1 py-3 rounded-full text-white text-sm" style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}>
-                {isSaving ? 'Saving...' : 'Save'}
+              <button onClick={handleSaveStory} disabled={story.isSaving} className="flex-1 py-3 rounded-full text-white text-sm" style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}>
+                {story.isSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Minimal header */}
-      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening || isSpeaking || isRecording ? 'opacity-20' : 'opacity-100'}`}>
+      {/* Header */}
+      <header className={`fixed top-0 left-0 right-0 z-40 transition-opacity duration-700 ${isListening || tts.isSpeaking || isRecording ? 'opacity-20' : 'opacity-100'}`}>
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-lg font-serif text-[#f9f7f2]/50 hover:text-[#f9f7f2]/80 transition-colors">Embers</Link>
           <div className="flex items-center gap-4">
-            {messages.length >= 2 && (
-              <button onClick={handleSaveStory} disabled={isSaving} className="text-xs py-2 px-4 rounded-full border border-[#E86D48]/30 text-[#E86D48]/80 hover:bg-[#E86D48]/10">
-                {isSaving ? 'Saving...' : 'Save Story'}
+            {conversation.messages.length >= 2 && (
+              <button onClick={handleSaveStory} disabled={story.isSaving} className="text-xs py-2 px-4 rounded-full border border-[#E86D48]/30 text-[#E86D48]/80 hover:bg-[#E86D48]/10">
+                {story.isSaving ? 'Saving...' : 'Save Story'}
               </button>
             )}
             <Link href="/life-book" className="text-[#f9f7f2]/30 hover:text-[#f9f7f2]/60 text-sm">My Stories</Link>
@@ -1036,13 +655,12 @@ export default function ConversationPage() {
         </div>
       </header>
 
-      {/* Main content */}
+      {/* Messages */}
       <main className="flex-1 flex flex-col justify-end relative z-10">
-        {/* Messages */}
-        {messages.length > 0 && (
+        {conversation.messages.length > 0 && (
           <div className="flex-1 overflow-y-auto pt-20 pb-4 px-6">
             <div className="max-w-2xl mx-auto space-y-6">
-              {messages.map((msg) => (
+              {conversation.messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${msg.role === 'user' ? 'bg-[#E86D48]/15 border border-[#E86D48]/20' : 'bg-white/5 border border-white/5'}`}>
                     <p className="text-[15px] leading-relaxed font-serif text-[#f9f7f2]/90 whitespace-pre-line">{msg.content}</p>
@@ -1056,11 +674,11 @@ export default function ConversationPage() {
                   </div>
                 </div>
               )}
-              {(isProcessing || isLoadingTTS || isTranscribing) && (
+              {(conversation.isProcessing || tts.isLoadingTTS || isTranscribing) && (
                 <div className="flex justify-start">
                   <div className="bg-white/5 border border-white/5 rounded-2xl px-5 py-3">
                     <p className="text-[#f9f7f2]/40 font-serif text-sm animate-pulse">
-                      {isProcessing ? 'Gathering my thoughts...' : isTranscribing ? 'Listening to your story...' : (warmLoadingMessage || 'Ember is listening...')}
+                      {conversation.isProcessing ? 'Gathering my thoughts...' : isTranscribing ? 'Listening to your story...' : (tts.warmLoadingMessage || 'Embers is listening...')}
                     </p>
                   </div>
                 </div>
@@ -1071,53 +689,44 @@ export default function ConversationPage() {
         )}
 
         {/* Fire area */}
-        <div className={`relative flex flex-col items-center justify-end transition-all duration-700 ${messages.length === 0 ? 'h-[70vh]' : 'h-[40vh] min-h-[280px]'}`}>
-          {/* Welcome text - only show before intro plays */}
-          {messages.length === 0 && !isPlayingIntro && !isSpeaking && (
+        <div className={`relative flex flex-col items-center justify-end transition-all duration-700 ${conversation.messages.length === 0 ? 'h-[70vh]' : 'h-[40vh] min-h-[280px]'}`}>
+          {/* Welcome text */}
+          {conversation.messages.length === 0 && !isPlayingIntro && !tts.isSpeaking && (
             <div className="absolute top-12 left-0 right-0 text-center px-6">
               <h1 className="text-3xl md:text-4xl font-serif text-[#f9f7f2]/90 mb-4">
-                {userName ? (userContext.isReturningUser ? `Welcome back, ${userName}` : `Hello, ${userName}`) : 'Hello'}
+                {conversation.userName ? (conversation.userContext.isReturningUser ? `Welcome back, ${conversation.userName}` : `Hello, ${conversation.userName}`) : 'Hello'}
               </h1>
               <p className="text-lg text-[#f9f7f2]/40 max-w-md mx-auto font-serif italic leading-relaxed">
-                {starterPrompt}
+                {conversation.starterPrompt}
               </p>
-              {/* Tap to start hint */}
-              <p className="text-sm text-[#f9f7f2]/20 mt-6">
-                Tap the flame to begin
-              </p>
+              <p className="text-sm text-[#f9f7f2]/20 mt-6">Tap the flame to begin</p>
             </div>
           )}
 
-          {/* Speaking/Loading indicator when Ember is talking or preparing to speak */}
-          {(isSpeaking || isLoadingTTS) && messages.length <= 1 && (
+          {/* Speaking/Loading indicator */}
+          {(tts.isSpeaking || tts.isLoadingTTS) && conversation.messages.length <= 1 && (
             <div className="absolute top-16 left-0 right-0 text-center px-6">
               <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                {isLoadingTTS ? (warmLoadingMessage || 'Ember is listening...') : 'Ember is speaking...'}
+                {tts.isLoadingTTS ? (tts.warmLoadingMessage || 'Embers is listening...') : 'Embers is speaking...'}
               </p>
             </div>
           )}
 
-          {/* Recording indicator - prominent for elderly users */}
+          {/* Recording indicator */}
           {isRecording && (
             <div className="absolute top-16 left-0 right-0 text-center px-6">
               <div className="inline-flex items-center gap-3 bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-6 py-3">
                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                <p className="text-lg text-[#f9f7f2]/90 font-serif">
-                  Recording {formattedDuration}
-                </p>
+                <p className="text-lg text-[#f9f7f2]/90 font-serif">Recording {formattedDuration}</p>
               </div>
-              <p className="text-sm text-[#f9f7f2]/40 mt-3 font-serif">
-                Tap the flame when you&apos;re finished
-              </p>
+              <p className="text-sm text-[#f9f7f2]/40 mt-3 font-serif">Tap the flame when you&apos;re finished</p>
             </div>
           )}
 
           {/* Transcribing indicator */}
           {isTranscribing && (
             <div className="absolute top-16 left-0 right-0 text-center px-6">
-              <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                Listening to your story...
-              </p>
+              <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">Listening to your story...</p>
             </div>
           )}
 
@@ -1125,16 +734,16 @@ export default function ConversationPage() {
           <div className="mb-8">
             <FlameButton
               isListening={isListening || isRecording}
-              isSpeaking={isSpeaking}
-              isProcessing={isProcessing || isTranscribing}
-              isLoadingTTS={isLoadingTTS}
+              isSpeaking={tts.isSpeaking}
+              isProcessing={conversation.isProcessing || isTranscribing}
+              isLoadingTTS={tts.isLoadingTTS}
               onClick={handleFireClick}
-              size={messages.length === 0 ? 'large' : 'medium'}
-              showEmberCount={savedStoriesCount}
+              size={conversation.messages.length === 0 ? 'large' : 'medium'}
+              showEmberCount={story.savedStoriesCount}
             />
           </div>
 
-          {/* Silence indicator - only for Web Speech API mode */}
+          {/* Silence indicator */}
           {!useWhisperFallback && isListening && hasActiveInput && silenceStage !== 'none' && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
               <SilenceProgressBar stage={silenceStage} progress={silenceDuration} message={silenceMessage} isVisible={true} />
@@ -1144,10 +753,10 @@ export default function ConversationPage() {
       </main>
 
       {/* Error */}
-      {error && (
+      {conversation.error && (
         <div className="fixed bottom-24 left-4 right-4 z-30">
           <div className="max-w-md mx-auto bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-            <p className="text-center text-red-400 text-sm">{error}</p>
+            <p className="text-center text-red-400 text-sm">{conversation.error}</p>
           </div>
         </div>
       )}
@@ -1160,16 +769,18 @@ export default function ConversationPage() {
             placeholder="or type here..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            disabled={isProcessing || isSpeaking || isRecording || isTranscribing}
+            disabled={conversation.isProcessing || tts.isSpeaking || isRecording || isTranscribing}
             className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-[#f9f7f2]/90 placeholder:text-[#f9f7f2]/20 focus:outline-none focus:border-[#E86D48]/30 text-sm"
           />
-          <button type="submit" disabled={isProcessing || isSpeaking || isRecording || isTranscribing || !inputText.trim()} className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30">
+          <button
+            type="submit"
+            disabled={conversation.isProcessing || tts.isSpeaking || isRecording || isTranscribing || !inputText.trim()}
+            className="px-5 py-3 rounded-full text-sm disabled:opacity-30 bg-[#E86D48]/20 border border-[#E86D48]/20 text-[#E86D48]/80 hover:bg-[#E86D48]/30"
+          >
             Send
           </button>
         </form>
       </footer>
-
-      <audio ref={audioRef} className="hidden" />
     </div>
   );
 }

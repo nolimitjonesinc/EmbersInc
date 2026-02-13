@@ -34,10 +34,10 @@ interface SelectedPrompt {
  * New user greetings - warm and welcoming
  */
 const newUserGreetings = [
-  "Hi there! I'm Ember, here to help preserve your family stories.",
-  "Hello! I'm Ember, and I'm so glad you're here to share your stories.",
-  "Welcome! I'm Ember, ready to listen whenever you are.",
-  "Hi! I'm Ember. Think of me as a friend who's genuinely curious about your life."
+  "Hi there! I'm Embers, here to help preserve your family stories.",
+  "Hello! I'm Embers, and I'm so glad you're here to share your stories.",
+  "Welcome! I'm Embers, ready to listen whenever you are.",
+  "Hi! I'm Embers. Think of me as a friend who's genuinely curious about your life."
 ]
 
 /**

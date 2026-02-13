@@ -44,6 +44,7 @@ interface VoiceCommandsOptions {
   onListeningChange?: (isListening: boolean) => void;
   commands?: string[]; // Specific words to listen for
   continuous?: boolean; // Keep listening after command
+  stopOnCommand?: boolean; // Stop recognition when command detected (default true)
   enabled?: boolean;
 }
 
@@ -66,6 +67,7 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
     onListeningChange,
     commands = [],
     continuous = false,
+    stopOnCommand = true,
     enabled = true,
   } = options;
 
@@ -222,7 +224,7 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
         const command = detectCommand(finalTranscript);
         if (command) {
           onCommand?.(command, finalTranscript);
-          if (!continuous) {
+          if (stopOnCommand && !continuous) {
             recognition.stop();
           }
         }
@@ -255,7 +257,7 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [isSupported, enabled, continuous, detectCommand, onCommand, onTranscript, onListeningChange]);
+  }, [isSupported, enabled, continuous, stopOnCommand, detectCommand, onCommand, onTranscript, onListeningChange]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {

@@ -14,6 +14,9 @@ import { analyzeMessage, updateCommunicationStyle, getTopThemes } from './styleA
 const STYLE_STORAGE_KEY = 'embers_user_style'
 const SESSION_STORAGE_KEY = 'embers_session_data'
 
+// Track whether this page load has already incremented the session count
+let sessionIncrementedThisLoad = false
+
 /**
  * Save user communication style to localStorage
  */
@@ -59,10 +62,16 @@ export function getSessionData(): UserSessionData {
 
   try {
     const data = JSON.parse(stored) as UserSessionData
-    // Update returning user status
     data.isReturningUser = true
-    data.totalSessions += 1
     data.lastVisit = new Date().toISOString()
+
+    // Only increment session count once per page load
+    if (!sessionIncrementedThisLoad) {
+      data.totalSessions += 1
+      sessionIncrementedThisLoad = true
+      saveSessionData(data)
+    }
+
     return data
   } catch {
     return defaultSessionData

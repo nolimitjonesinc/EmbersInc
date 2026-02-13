@@ -61,8 +61,9 @@ export async function updateSession(request: NextRequest) {
 }
 
 // Protected routes configuration
+// Note: /conversation is NOT protected - users can record stories without login
+// Stories save locally first, auth only needed for cloud backup/sharing
 export const protectedRoutes = [
-  '/conversation',
   '/stories',
   '/life-book',
   '/profile',

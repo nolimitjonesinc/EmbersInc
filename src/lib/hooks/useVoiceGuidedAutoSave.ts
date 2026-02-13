@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Message } from '@/types';
+import { saveWithSync, loadLocal, clearWithSync, type SyncStatus } from '@/lib/storage/dualStorage';
 
 /**
  * Voice-Guided Auto-Save Hook
@@ -123,7 +124,10 @@ export function useVoiceGuidedAutoSave(
   const hasSpokenSaveOfferRef = useRef(false);
   const hasAutoSavedRef = useRef(false);
 
-  // Save draft to localStorage
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const DRAFT_KEY = 'embers_conversation_draft';
+
+  // Save draft via dualStorage (localStorage instant + Supabase queued)
   const saveDraftToLocalStorage = useCallback(() => {
     if (messages.length < 2) return;
 
@@ -134,7 +138,10 @@ export function useVoiceGuidedAutoSave(
       userName: localStorage.getItem('embers_user_name') || '',
     };
 
-    localStorage.setItem('embers_conversation_draft', JSON.stringify(draft));
+    saveWithSync(DRAFT_KEY, draft, {
+      onSyncStatusChange: setSyncStatus,
+      onSyncError: (err) => console.warn('[AutoSave] Draft save issue:', err),
+    });
 
     setAutoSaveState(prev => ({
       ...prev,
@@ -149,13 +156,20 @@ export function useVoiceGuidedAutoSave(
     if (messages.length < 2 || !enableSupabaseDrafts) return;
 
     try {
-      await fetch('/api/drafts', {
+      const response = await fetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages }),
       });
+      if (response.ok) {
+        setSyncStatus('synced');
+      } else {
+        setSyncStatus('error');
+        console.warn('[AutoSave] Supabase draft save returned', response.status);
+      }
     } catch (err) {
-      console.error('Failed to save draft to Supabase:', err);
+      setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      console.warn('[AutoSave] Supabase draft save failed (saved locally):', err);
     }
   }, [messages, enableSupabaseDrafts]);
 
@@ -174,49 +188,36 @@ export function useVoiceGuidedAutoSave(
         messages: data.draft.messages,
         savedAt: new Date(data.draft.updated_at),
       };
-    } catch {
-      return null;
-    }
-  }, [enableSupabaseDrafts]);
-
-  // Clear draft from Supabase
-  const clearDraftFromSupabase = useCallback(async () => {
-    if (!enableSupabaseDrafts) return;
-
-    try {
-      await fetch('/api/drafts', { method: 'DELETE' });
     } catch (err) {
-      console.error('Failed to clear draft from Supabase:', err);
+      console.warn('[AutoSave] Could not load cloud draft (using local):', err);
+      return null;
     }
   }, [enableSupabaseDrafts]);
 
-  // Load draft from localStorage
+  // Load draft from localStorage via dualStorage
   const loadDraft = useCallback((): { messages: Message[]; savedAt: Date } | null => {
-    try {
-      const draftStr = localStorage.getItem('embers_conversation_draft');
-      if (!draftStr) return null;
+    const result = loadLocal<{ messages: Message[]; savedAt: string }>(DRAFT_KEY);
+    if (!result) return null;
 
-      const draft = JSON.parse(draftStr);
-      return {
-        messages: draft.messages,
-        savedAt: new Date(draft.savedAt),
-      };
-    } catch {
-      return null;
-    }
+    return {
+      messages: result.data.messages,
+      savedAt: new Date(result.data.savedAt),
+    };
   }, []);
 
-  // Clear draft from localStorage and Supabase
+  // Clear draft from both localStorage and Supabase
   const clearDraft = useCallback(() => {
-    localStorage.removeItem('embers_conversation_draft');
+    const clearFromCloud = enableSupabaseDrafts
+      ? async () => { await fetch('/api/drafts', { method: 'DELETE' }) }
+      : undefined;
+
+    clearWithSync(DRAFT_KEY, clearFromCloud);
     setAutoSaveState({
       hasDraft: false,
       lastSavedAt: null,
       draftId: null,
     });
-    // Also clear from Supabase
-    clearDraftFromSupabase();
-  }, [clearDraftFromSupabase]);
+  }, [enableSupabaseDrafts]);
 
   // Reset silence tracking (called when user speaks or interacts)
   const resetSilence = useCallback(() => {
@@ -317,6 +318,7 @@ export function useVoiceGuidedAutoSave(
 
     // Auto-save state
     autoSaveState,
+    syncStatus,
 
     // Actions
     resetSilence,

@@ -2,47 +2,44 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { interestCategories } from '@/data/interests'
-import { interestService } from '@/lib/services/interestService'
 import { FlameButton } from '@/components/conversation/FlameButton'
 import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands'
 
-type OnboardingStep = 'welcome' | 'interests' | 'name' | 'confirm-name' | 'ready'
+/**
+ * Voice-First Conversational Onboarding
+ *
+ * Simple flow:
+ * 1. Tap Embers to begin (unlocks audio)
+ * 2. Embers introduces herself and what the app is about
+ * 3. Embers asks for name
+ * 4. Embers confirms name
+ * 5. Ready to share first story
+ *
+ * No interests selection - Embers uses sensible defaults.
+ * No login required - stories save locally first.
+ */
 
-// All available interest names for voice matching
-const ALL_INTEREST_NAMES = interestCategories.flatMap(cat =>
-  cat.items.map(i => i.title.toLowerCase())
-)
-
-// Voice scripts - conversational, with voice response options
-const VOICE_SCRIPTS = {
-  welcome: `Hello. I'm Ember. I'm here to help you preserve the stories and memories that matter most to you. There's no rush, no pressure. Just your voice, your memories, and all the time you need. Say "yes" or "start" when you're ready to begin. Or you can tap the orange button on screen.`,
-
-  interests: `I'd love to know what kinds of stories interest you most. You can say topics like "family", "career", "travel", "love", or "childhood". Say as many as you'd like, one at a time. When you're finished, say "done" or "that's all". Or you can tap the topics on screen.`,
-
-  name: `What should I call you? Just say your name. If I don't catch it right, you can spell it out for me, letter by letter.`,
-
-  confirmName: (name: string) => `I heard ${name}. Is that right? Say "yes" if that's correct, or say your name again if I got it wrong.`,
-
-  ready: (name: string) => `Wonderful, ${name}. You're all set. Remember, there's no rush. Just speak naturally, and I'll guide you along the way. Say "yes" or "start" when you're ready to share your first story. Or tap the button on screen.`
-}
+type Phase = 'tap-to-start' | 'introduction' | 'ask-name' | 'confirm-name' | 'ready' | 'starting'
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const [step, setStep] = useState<OnboardingStep>('welcome')
-  const [name, setName] = useState('')
-  const [pendingName, setPendingName] = useState('') // Name waiting for confirmation
-  const [selectedInterests, setSelectedInterests] = useState<Set<string>>(new Set())
 
-  // Voice state
-  const [isPlayingVoice, setIsPlayingVoice] = useState(false)
-  const [hasPlayedStepVoice, setHasPlayedStepVoice] = useState<Set<string>>(new Set())
+  // Conversation state
+  const [phase, setPhase] = useState<Phase>('tap-to-start')
+  const [userName, setUserName] = useState('')
+  const [typedName, setTypedName] = useState('')
+
+  // Embers' voice state
+  const [isEmberSpeaking, setIsEmberSpeaking] = useState(false)
+  const [emberText, setEmberText] = useState('')
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const shouldListenAfterVoiceRef = useRef(false)
+  const isSpeakingRef = useRef(false) // Ref-based guard (doesn't go stale in closures)
+  const hasStartedRef = useRef(false)
+  const manualStopRef = useRef(false)
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Voice commands hook
+  // Voice recognition
   const {
     isListening,
     isSupported: isVoiceSupported,
@@ -52,28 +49,134 @@ export default function OnboardingPage() {
     resetTranscript,
     parseSpokenName,
     isAffirmative,
+    isNegative,
   } = useVoiceCommands({
-    continuous: false,
+    continuous: true,
+    stopOnCommand: false,
     enabled: true,
   })
 
-  // Load existing data on mount
-  useEffect(() => {
-    const storedName = localStorage.getItem('embers_user_name')
-    if (storedName) setName(storedName)
+  // ============================================
+  // EMBER'S DIALOGUE
+  // ============================================
 
-    const storedInterests = interestService.get()
-    if (storedInterests.length > 0) {
-      setSelectedInterests(new Set(storedInterests))
+  const DIALOGUE = {
+    introduction: `Hello, I'm Embers. I'm here to help you preserve the stories and memories that matter most to you — the moments, the people, the experiences that shaped your life. Think of me as a patient friend who's genuinely curious about your life. You just talk, and I listen. I'll ask gentle questions to help your memories come alive. There's no rush, no pressure. Just your voice, your memories, and all the time you need. Everything you share is saved safely, just for you. And when you're ready, your family can treasure these stories forever. First, what should I call you?`,
+
+    askNameAgain: `What's your name? Just say it, or spell it out if that's easier.`,
+
+    confirmName: (name: string) => `I heard ${name}. Is that right? Say yes, or say your name again if I got it wrong.`,
+
+    ready: (name: string) => `Wonderful to meet you, ${name}. Whenever you're ready to share your first story, just say "let's go" or tap the button. I'll be right here, listening.`,
+
+    starting: (name: string) => `Here we go, ${name}. Let's capture some memories together.`,
+  }
+
+  // Idle check-in prompts by phase
+  const IDLE_PROMPTS: Partial<Record<Phase, string>> = {
+    'introduction': "I'm listening. Just say your name whenever you're ready.",
+    'ask-name': "Take your time. Just say your name, or type it below.",
+    'confirm-name': "Just say yes if that's right, or say your name again.",
+    'ready': "Take your time. Just say 'let's go' when you're ready, or tap the flame.",
+  }
+  const idlePromptsRef = useRef(IDLE_PROMPTS)
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  const speakEmberRef = useRef<(text: string, listenAfter?: boolean) => void>(() => {})
+
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current)
+      idleTimerRef.current = null
     }
   }, [])
 
-  // Play voice and optionally start listening after
-  const playVoice = useCallback(async (text: string, listenAfter = true) => {
-    if (isPlayingVoice) return
+  // Reset idle timer when user speaks
+  useEffect(() => {
+    if (transcript) {
+      clearIdleTimer()
+    }
+  }, [transcript, clearIdleTimer])
 
-    setIsPlayingVoice(true)
-    shouldListenAfterVoiceRef.current = listenAfter
+  // ============================================
+  // VOICE PLAYBACK
+  // ============================================
+
+  // Pre-generated static audio for instant playback (no API latency)
+  const STATIC_AUDIO = {
+    introduction: '/audio/embers-intro.mp3',
+    askName: '/audio/embers-ask-name.mp3',
+  }
+
+  // Start idle timer — fires after 12 seconds of silence, speaks a gentle prompt
+  const startIdleTimer = useCallback(() => {
+    clearIdleTimer()
+    idleTimerRef.current = setTimeout(() => {
+      const prompt = idlePromptsRef.current[phaseRef.current]
+      if (prompt && !isSpeakingRef.current) {
+        speakEmberRef.current(prompt)
+      }
+    }, 12000)
+  }, [clearIdleTimer])
+
+  // Stop any currently playing audio
+  const stopAllAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
+      audioRef.current = null
+    }
+  }, [])
+
+  // Play pre-generated static audio (instant, no API call)
+  const playStaticAudio = useCallback((audioPath: string, text: string, listenAfter = true) => {
+    if (isSpeakingRef.current) return
+
+    clearIdleTimer()
+    isSpeakingRef.current = true
+    setIsEmberSpeaking(true)
+    setEmberText(text)
+
+    stopAllAudio()
+
+    const audio = new Audio(audioPath)
+    audioRef.current = audio
+
+    audio.onended = () => {
+      isSpeakingRef.current = false
+      setIsEmberSpeaking(false)
+      startIdleTimer()
+      if (listenAfter && isVoiceSupported) {
+        setTimeout(() => {
+          resetTranscript()
+          startListening()
+        }, 400)
+      }
+    }
+
+    audio.onerror = () => {
+      console.error('Static audio failed, falling back to TTS')
+      isSpeakingRef.current = false
+      setIsEmberSpeaking(false)
+      speakEmberRef.current(text, listenAfter)
+    }
+
+    audio.play().catch(() => {
+      isSpeakingRef.current = false
+      setIsEmberSpeaking(false)
+      speakEmberRef.current(text, listenAfter)
+    })
+  }, [isVoiceSupported, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
+
+  // Generate speech via TTS API (for dynamic text like names)
+  const speakEmber = useCallback(async (text: string, listenAfter = true) => {
+    if (isSpeakingRef.current) return
+
+    clearIdleTimer()
+    isSpeakingRef.current = true
+    setIsEmberSpeaking(true)
+    setEmberText(text)
 
     try {
       const response = await fetch('/api/tts', {
@@ -87,604 +190,458 @@ export default function OnboardingPage() {
       const audioBlob = await response.blob()
       const audioUrl = URL.createObjectURL(audioBlob)
 
-      if (audioRef.current) audioRef.current.pause()
+      stopAllAudio()
 
       const audio = new Audio(audioUrl)
       audioRef.current = audio
 
       audio.onended = () => {
-        setIsPlayingVoice(false)
+        isSpeakingRef.current = false
+        setIsEmberSpeaking(false)
         URL.revokeObjectURL(audioUrl)
-        // Auto-start listening after voice finishes
-        if (shouldListenAfterVoiceRef.current && isVoiceSupported) {
+        startIdleTimer()
+
+        if (listenAfter && isVoiceSupported) {
           setTimeout(() => {
             resetTranscript()
             startListening()
-          }, 500)
+          }, 400)
         }
       }
 
       audio.onerror = () => {
-        setIsPlayingVoice(false)
+        isSpeakingRef.current = false
+        setIsEmberSpeaking(false)
         URL.revokeObjectURL(audioUrl)
       }
 
       await audio.play()
-    } catch {
-      setIsPlayingVoice(false)
+    } catch (error) {
+      console.error('TTS error:', error)
+      isSpeakingRef.current = false
+      setIsEmberSpeaking(false)
+      if (listenAfter && isVoiceSupported) {
+        setTimeout(() => {
+          resetTranscript()
+          startListening()
+        }, 400)
+      }
     }
-  }, [isPlayingVoice, isVoiceSupported, resetTranscript, startListening])
+  }, [isVoiceSupported, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
 
-  // Play voice when step changes (only once per step)
-  useEffect(() => {
-    if (hasPlayedStepVoice.has(step)) return
+  // Wire up speakEmber ref for idle timer callback
+  speakEmberRef.current = speakEmber
 
-    const timer = setTimeout(() => {
-      setHasPlayedStepVoice(prev => new Set(prev).add(step))
+  // ============================================
+  // PHASE TRANSITIONS
+  // ============================================
 
-      switch (step) {
-        case 'welcome':
-          playVoice(VOICE_SCRIPTS.welcome)
+  const goToPhase = useCallback((nextPhase: Phase, data?: { name?: string }) => {
+    const name = data?.name || userName
+    setPhase(nextPhase)
+    resetTranscript()
+
+    setTimeout(() => {
+      switch (nextPhase) {
+        case 'introduction':
+          playStaticAudio(STATIC_AUDIO.introduction, DIALOGUE.introduction)
           break
-        case 'interests':
-          playVoice(VOICE_SCRIPTS.interests)
-          break
-        case 'name':
-          playVoice(VOICE_SCRIPTS.name)
+        case 'ask-name':
+          playStaticAudio(STATIC_AUDIO.askName, DIALOGUE.askNameAgain)
           break
         case 'confirm-name':
-          playVoice(VOICE_SCRIPTS.confirmName(pendingName))
+          // Dynamic - includes user's name
+          speakEmber(DIALOGUE.confirmName(name))
           break
         case 'ready':
-          playVoice(VOICE_SCRIPTS.ready(name))
+          // Dynamic - includes user's name
+          speakEmber(DIALOGUE.ready(name))
+          break
+        case 'starting':
+          // Dynamic - includes user's name
+          speakEmber(DIALOGUE.starting(name), false)
           break
       }
     }, 300)
+  }, [userName, speakEmber, playStaticAudio, resetTranscript, DIALOGUE, STATIC_AUDIO])
 
-    return () => clearTimeout(timer)
-  }, [step, hasPlayedStepVoice, name, pendingName, playVoice])
+  // ============================================
+  // CHECK FOR RETURNING USER
+  // ============================================
 
-  // Process voice input based on current step
   useEffect(() => {
-    if (!transcript || isPlayingVoice) return
+    if (hasStartedRef.current) return
+    hasStartedRef.current = true
 
-    const lowerTranscript = transcript.toLowerCase().trim()
-
-    switch (step) {
-      case 'welcome':
-        // Listen for "yes", "start", "begin", etc.
-        if (isAffirmative(lowerTranscript)) {
-          stopListening()
-          setStep('interests')
-        }
-        break
-
-      case 'interests':
-        // Check for "done" or similar
-        if (lowerTranscript.includes('done') ||
-            lowerTranscript.includes("that's all") ||
-            lowerTranscript.includes('finished') ||
-            lowerTranscript.includes('next')) {
-          stopListening()
-          if (selectedInterests.size > 0) {
-            interestService.save(Array.from(selectedInterests))
-            setStep('name')
-          } else {
-            // Prompt them to select at least one
-            playVoice("Please tell me at least one topic that interests you. You can say things like family, career, or childhood.")
-          }
-          return
-        }
-
-        // Check for interest names in transcript
-        for (const interest of ALL_INTEREST_NAMES) {
-          if (lowerTranscript.includes(interest)) {
-            // Find the actual interest ID
-            for (const cat of interestCategories) {
-              const found = cat.items.find(i => i.title.toLowerCase() === interest)
-              if (found) {
-                setSelectedInterests(prev => {
-                  const next = new Set(prev)
-                  next.add(found.id)
-                  return next
-                })
-                // Confirm the selection
-                playVoice(`Got it, ${found.title}. What else? Say "done" when you're finished.`)
-                break
-              }
-            }
-            break
-          }
-        }
-        break
-
-      case 'name':
-        // Parse the spoken name
-        if (lowerTranscript.length >= 2) {
-          stopListening()
-          const parsedName = parseSpokenName(transcript)
-          if (parsedName && parsedName.length >= 2) {
-            setPendingName(parsedName)
-            setStep('confirm-name')
-          }
-        }
-        break
-
-      case 'confirm-name':
-        if (isAffirmative(lowerTranscript)) {
-          // Name confirmed
-          stopListening()
-          setName(pendingName)
-          localStorage.setItem('embers_user_name', pendingName)
-          setStep('ready')
-        } else if (lowerTranscript.length >= 2 && !lowerTranscript.includes('no')) {
-          // They're saying their name again
-          stopListening()
-          const parsedName = parseSpokenName(transcript)
-          if (parsedName && parsedName.length >= 2) {
-            setPendingName(parsedName)
-            // Reset the played voice flag to re-confirm
-            setHasPlayedStepVoice(prev => {
-              const next = new Set(prev)
-              next.delete('confirm-name')
-              return next
-            })
-          }
-        } else if (lowerTranscript.includes('no')) {
-          // Go back to name entry
-          stopListening()
-          setStep('name')
-          setHasPlayedStepVoice(prev => {
-            const next = new Set(prev)
-            next.delete('name')
-            return next
-          })
-        }
-        break
-
-      case 'ready':
-        if (isAffirmative(lowerTranscript)) {
-          stopListening()
-          router.push('/conversation')
-        }
-        break
+    const existingName = localStorage.getItem('embers_user_name')
+    if (existingName) {
+      setUserName(existingName)
+      setTypedName(existingName)
     }
-  }, [transcript, step, isPlayingVoice, selectedInterests, stopListening, playVoice,
-      isAffirmative, parseSpokenName, pendingName, router])
+  }, [])
 
-  // Manual button handlers (fallback for those who prefer tapping)
-  const handleWelcomeStart = () => {
-    stopListening()
-    setStep('interests')
-  }
+  // Handle tap to start
+  const handleTapToStart = useCallback(() => {
+    const existingName = localStorage.getItem('embers_user_name')
 
-  const handleInterestToggle = (interestId: string) => {
-    setSelectedInterests(prev => {
-      const next = new Set(prev)
-      if (next.has(interestId)) {
-        next.delete(interestId)
-      } else {
-        next.add(interestId)
+    if (existingName) {
+      // Returning user - welcome back
+      setUserName(existingName)
+      setPhase('ready')
+      speakEmber(`Welcome back, ${existingName}! It's Embers. Ready to share another story? Just say "let's go" when you're ready.`)
+    } else {
+      // New user - full introduction
+      goToPhase('introduction')
+    }
+  }, [speakEmber, goToPhase])
+
+  // ============================================
+  // VOICE INPUT PROCESSING
+  // ============================================
+
+  useEffect(() => {
+    if (!transcript || isEmberSpeaking) return
+
+    const lower = transcript.toLowerCase().trim()
+
+    switch (phase) {
+      case 'introduction':
+      case 'ask-name': {
+        // Listen for a name
+        if (lower.length >= 2) {
+          const parsedName = parseSpokenName(transcript)
+          if (parsedName && parsedName.length >= 2) {
+            stopListening()
+            setUserName(parsedName)
+            setTypedName(parsedName)
+            goToPhase('confirm-name', { name: parsedName })
+          }
+        }
+        break
       }
-      return next
-    })
-  }
 
-  const handleInterestsContinue = () => {
-    stopListening()
-    interestService.save(Array.from(selectedInterests))
-    setStep('name')
-  }
+      case 'confirm-name': {
+        if (isAffirmative(lower)) {
+          stopListening()
+          localStorage.setItem('embers_user_name', userName)
+          goToPhase('ready', { name: userName })
+        } else if (isNegative(lower)) {
+          stopListening()
+          goToPhase('ask-name')
+        } else if (lower.length >= 2) {
+          // They're saying their name again
+          const parsedName = parseSpokenName(transcript)
+          if (parsedName && parsedName.length >= 2) {
+            stopListening()
+            setUserName(parsedName)
+            setTypedName(parsedName)
+            goToPhase('confirm-name', { name: parsedName })
+          }
+        }
+        break
+      }
 
-  const handleNameSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (name.trim()) {
-      stopListening()
-      localStorage.setItem('embers_user_name', name.trim())
-      setStep('ready')
+      case 'ready': {
+        if (isAffirmative(lower) || lower.includes("let's go") || lower.includes('start') || lower.includes('ready')) {
+          stopListening()
+          goToPhase('starting')
+          // Set flags so conversation page auto-starts voice with SHORT greeting
+          sessionStorage.setItem('embers_auto_start_conversation', 'true')
+          sessionStorage.setItem('embers_came_from_onboarding', 'true')
+          setTimeout(() => {
+            router.push('/conversation')
+          }, 3000)
+        }
+        break
+      }
     }
+  }, [transcript, phase, isEmberSpeaking, userName, stopListening, resetTranscript,
+      goToPhase, parseSpokenName, isAffirmative, isNegative, router])
+
+  // Flame tap in active phases — toggle listening or re-enable it
+  const handleFlameClick = useCallback(() => {
+    if (isEmberSpeaking) return
+
+    if (isListening) {
+      manualStopRef.current = true
+      stopListening()
+    } else {
+      resetTranscript()
+      startListening()
+    }
+  }, [isEmberSpeaking, isListening, stopListening, resetTranscript, startListening])
+
+  // ============================================
+  // TAP HANDLERS (BACKUP)
+  // ============================================
+
+  const handleNameSubmit = () => {
+    if (typedName.trim().length >= 2) {
+      stopListening()
+      const name = typedName.trim()
+      setUserName(name)
+      localStorage.setItem('embers_user_name', name)
+      goToPhase('ready', { name })
+    }
+  }
+
+  const handleNameConfirmYes = () => {
+    stopListening()
+    localStorage.setItem('embers_user_name', userName)
+    goToPhase('ready', { name: userName })
+  }
+
+  const handleNameConfirmNo = () => {
+    stopListening()
+    setUserName('')
+    setTypedName('')
+    goToPhase('ask-name')
   }
 
   const handleStart = () => {
     stopListening()
-    router.push('/conversation')
+    goToPhase('starting')
+    // Set flags so conversation page auto-starts voice with SHORT greeting
+    sessionStorage.setItem('embers_auto_start_conversation', 'true')
+    sessionStorage.setItem('embers_came_from_onboarding', 'true')
+    setTimeout(() => {
+      router.push('/conversation')
+    }, 3000)
   }
 
+  // Cleanup audio and timers on unmount
+  useEffect(() => {
+    return () => {
+      stopAllAudio()
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    }
+  }, [stopAllAudio])
+
+  // ============================================
+  // RENDER
+  // ============================================
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0908] relative overflow-hidden">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[70%]"
-          style={{
-            background: `radial-gradient(ellipse at center bottom,
-              rgba(232, 109, 72, ${isPlayingVoice ? 0.15 : isListening ? 0.12 : 0.08}) 0%,
-              rgba(196, 90, 58, ${isPlayingVoice ? 0.08 : isListening ? 0.06 : 0.04}) 30%,
-              transparent 60%)`,
-            transition: 'all 0.5s ease-out'
-          }}
-        />
-      </div>
+    <div className="min-h-screen bg-[#0a0908] flex flex-col items-center justify-center relative overflow-hidden px-6">
 
-      {/* Listening indicator - always visible when listening */}
-      {isListening && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="bg-[#E86D48]/20 border border-[#E86D48]/30 rounded-full px-6 py-2 flex items-center gap-3">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-[#f9f7f2]/80 text-sm">Listening...</span>
-          </div>
-        </div>
-      )}
+      {/* Ambient glow */}
+      <div
+        className="fixed inset-0 pointer-events-none transition-all duration-700"
+        style={{
+          background: `radial-gradient(ellipse at center,
+            rgba(232, 109, 72, ${isEmberSpeaking ? 0.15 : isListening ? 0.1 : 0.05}) 0%,
+            transparent 60%)`
+        }}
+      />
 
-      {/* Live transcript display */}
-      {isListening && transcript && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-md">
-          <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2">
-            <p className="text-[#f9f7f2]/60 text-sm text-center">&ldquo;{transcript}&rdquo;</p>
-          </div>
-        </div>
-      )}
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col items-center max-w-lg w-full">
 
-      <div className="relative z-10 flex-1 flex flex-col max-w-2xl mx-auto w-full px-6 py-8">
-        <AnimatePresence mode="wait">
-          {/* Welcome Step */}
-          {step === 'welcome' && (
+        {/* Embers' Flame */}
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className={`relative ${phase === 'tap-to-start' ? 'cursor-pointer' : ''}`}
+        >
+          <FlameButton
+            isListening={isListening}
+            isSpeaking={isEmberSpeaking}
+            isProcessing={false}
+            onClick={phase === 'tap-to-start' ? handleTapToStart : handleFlameClick}
+            size="large"
+          />
+          {phase === 'tap-to-start' && (
             <motion.div
-              key="welcome"
-              initial={{ opacity: 0, y: 20 }}
+              animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute inset-[-8px] rounded-full border-2 border-[#E86D48]/40 pointer-events-none"
+            />
+          )}
+        </motion.div>
+
+        {/* Embers' Speech */}
+        <AnimatePresence mode="wait">
+          {emberText && phase !== 'tap-to-start' && (
+            <motion.div
+              key={phase}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4 }}
+              className="mt-8 text-center"
             >
-              <div className="relative mb-4">
-                <FlameButton
-                  isListening={isListening}
-                  isSpeaking={isPlayingVoice}
-                  isProcessing={false}
-                  onClick={() => {}}
-                  size="large"
-                />
-              </div>
-
-              {isPlayingVoice && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse"
-                >
-                  Ember is speaking...
-                </motion.p>
+              <p className="text-xl md:text-2xl text-[#f9f7f2]/90 font-serif leading-relaxed">
+                {emberText}
+              </p>
+              {isEmberSpeaking && (
+                <p className="text-sm text-[#E86D48]/60 mt-4 animate-pulse">
+                  Embers is speaking...
+                </p>
               )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              <motion.div className="space-y-4">
-                <h1 className="text-4xl font-serif font-bold text-[#f9f7f2]">
-                  Hello, I&apos;m Ember
-                </h1>
-                <p className="text-xl text-[#f9f7f2]/60 leading-relaxed max-w-md">
-                  I&apos;m here to help you preserve your stories and memories.
-                </p>
-              </motion.div>
+        {/* Input Area */}
+        <AnimatePresence mode="wait">
 
-              {/* Voice instruction */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-center max-w-sm">
-                <p className="text-[#f9f7f2]/70 text-lg">
-                  Say <span className="text-[#E86D48] font-semibold">&ldquo;yes&rdquo;</span> or{' '}
-                  <span className="text-[#E86D48] font-semibold">&ldquo;start&rdquo;</span> when you&apos;re ready
-                </p>
-                <p className="text-[#f9f7f2]/40 text-sm mt-2">
-                  Or tap the button below
-                </p>
-              </div>
-
-              <button
-                onClick={handleWelcomeStart}
-                disabled={isPlayingVoice}
-                className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-              >
-                Let&apos;s Get Started
-              </button>
-
-              <Link href="/" className="text-[#f9f7f2]/40 hover:text-[#f9f7f2]/60 transition-colors text-sm">
-                ← Back to home
-              </Link>
+          {/* TAP TO START */}
+          {phase === 'tap-to-start' && (
+            <motion.div
+              key="tap-to-start"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="mt-8 text-center"
+            >
+              <p className="text-2xl text-[#f9f7f2]/80 font-serif mb-2">
+                Hello, I'm Embers
+              </p>
+              <p className="text-lg text-[#f9f7f2]/50">
+                Tap to begin
+              </p>
             </motion.div>
           )}
 
-          {/* Interests Step */}
-          {step === 'interests' && (
+          {/* NAME INPUT (after introduction) */}
+          {(phase === 'introduction' || phase === 'ask-name') && !isEmberSpeaking && (
             <motion.div
-              key="interests"
+              key="name-input"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col"
+              className="mt-10 w-full"
             >
-              {isPlayingVoice && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center mb-4">
-                  <p className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">Ember is speaking...</p>
-                </motion.div>
-              )}
-
-              <div className="text-center mb-6">
-                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2] mb-3">
-                  What stories call to you?
-                </h1>
-                <p className="text-[#f9f7f2]/60">
-                  Say topics aloud, or tap them below
-                </p>
-              </div>
-
-              {/* Voice instruction */}
-              <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-4 mb-6 text-center">
-                <p className="text-[#f9f7f2]/70">
-                  Say topics like <span className="text-[#E86D48]">&ldquo;family&rdquo;</span>,{' '}
-                  <span className="text-[#E86D48]">&ldquo;career&rdquo;</span>, or{' '}
-                  <span className="text-[#E86D48]">&ldquo;childhood&rdquo;</span>
-                </p>
-                <p className="text-[#f9f7f2]/50 text-sm mt-1">
-                  Say <span className="text-[#E86D48]">&ldquo;done&rdquo;</span> when finished
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-[#f9f7f2]/40">
-                  {selectedInterests.size === 0
-                    ? 'Select at least one topic'
-                    : `${selectedInterests.size} topic${selectedInterests.size > 1 ? 's' : ''} selected`}
-                </span>
-                <button onClick={() => setStep('welcome')} className="text-sm text-[#f9f7f2]/40 hover:text-[#f9f7f2]/60">
-                  ← Back
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Say or type your name..."
+                  value={typedName}
+                  onChange={(e) => setTypedName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+                  className="w-full text-center text-2xl py-4 px-6 bg-white/5 border border-white/20 rounded-2xl text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50 transition-colors"
+                />
+                <button
+                  onClick={handleNameSubmit}
+                  disabled={typedName.trim().length < 2}
+                  className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-30 transition-all"
+                  style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+                >
+                  That's my name
                 </button>
               </div>
-
-              <div className="flex-1 overflow-y-auto space-y-6 pb-24">
-                {interestCategories.map((category) => (
-                  <div key={category.id}>
-                    <h3 className="text-sm font-medium text-[#f9f7f2]/40 mb-3 uppercase tracking-wide">
-                      {category.title}
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {category.items.map((interest) => {
-                        const isSelected = selectedInterests.has(interest.id)
-                        return (
-                          <button
-                            key={interest.id}
-                            onClick={() => handleInterestToggle(interest.id)}
-                            className={`px-4 py-2 rounded-full text-sm transition-all ${
-                              isSelected
-                                ? 'bg-[#E86D48] text-white'
-                                : 'bg-white/5 text-[#f9f7f2]/70 hover:bg-white/10'
-                            }`}
-                          >
-                            {interest.title}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0a0908] via-[#0a0908] to-transparent">
-                <div className="max-w-2xl mx-auto">
-                  <button
-                    onClick={handleInterestsContinue}
-                    disabled={selectedInterests.size === 0}
-                    className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                    style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
             </motion.div>
           )}
 
-          {/* Name Step - Voice First */}
-          {step === 'name' && (
+          {/* NAME CONFIRM */}
+          {phase === 'confirm-name' && !isEmberSpeaking && (
             <motion.div
-              key="name"
+              key="name-confirm"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
+              className="mt-10 w-full"
             >
-              {isPlayingVoice && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                  Ember is speaking...
-                </motion.p>
-              )}
-
-              <div className="space-y-4">
-                <span className="text-6xl">👋</span>
-                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
-                  What should I call you?
-                </h1>
-                <p className="text-xl text-[#f9f7f2]/60 max-w-md">
-                  Just say your name
-                </p>
-              </div>
-
-              {/* Voice instruction */}
-              <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-6 text-center max-w-sm">
-                <p className="text-[#f9f7f2]/70 text-lg">
-                  Say your name clearly
-                </p>
-                <p className="text-[#f9f7f2]/50 text-sm mt-2">
-                  If I don&apos;t catch it, spell it out: <span className="text-[#E86D48]">&ldquo;H-A-R-O-L-D&rdquo;</span>
-                </p>
-              </div>
-
-              {/* Fallback text input */}
-              <div className="w-full max-w-sm">
-                <p className="text-[#f9f7f2]/30 text-sm mb-3">Or type it below:</p>
-                <form onSubmit={handleNameSubmit} className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="Your first name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full text-center text-2xl py-4 px-6 bg-white/5 border border-white/20 rounded-xl text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!name.trim()}
-                    className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                    style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
-                  >
-                    Continue
-                  </button>
-                </form>
-              </div>
-
-              <button onClick={() => setStep('interests')} className="text-[#f9f7f2]/40 hover:text-[#f9f7f2]/60 transition-colors">
-                ← Go back
-              </button>
-            </motion.div>
-          )}
-
-          {/* Confirm Name Step */}
-          {step === 'confirm-name' && (
-            <motion.div
-              key="confirm-name"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
-            >
-              {isPlayingVoice && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                  Ember is speaking...
-                </motion.p>
-              )}
-
-              <div className="space-y-4">
-                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
-                  I heard <span className="text-[#E86D48]">{pendingName}</span>
-                </h1>
-                <p className="text-xl text-[#f9f7f2]/60 max-w-md">
-                  Is that right?
-                </p>
-              </div>
-
-              {/* Voice instruction */}
-              <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-6 text-center max-w-sm">
-                <p className="text-[#f9f7f2]/70 text-lg">
-                  Say <span className="text-[#E86D48] font-semibold">&ldquo;yes&rdquo;</span> if correct
-                </p>
-                <p className="text-[#f9f7f2]/50 text-sm mt-2">
-                  Or say your name again if I got it wrong
-                </p>
-              </div>
-
-              {/* Manual buttons */}
-              <div className="flex gap-4 w-full max-w-sm">
+              <div className="flex gap-4">
                 <button
-                  onClick={() => {
-                    setStep('name')
-                    setHasPlayedStepVoice(prev => {
-                      const next = new Set(prev)
-                      next.delete('name')
-                      return next
-                    })
-                  }}
-                  className="flex-1 py-4 rounded-full text-[#f9f7f2]/70 font-medium text-lg border border-white/20 hover:bg-white/5"
+                  onClick={handleNameConfirmNo}
+                  className="flex-1 py-4 rounded-full text-[#f9f7f2]/70 font-medium text-lg border border-white/20 hover:bg-white/5 transition-colors"
                 >
                   No, try again
                 </button>
                 <button
-                  onClick={() => {
-                    setName(pendingName)
-                    localStorage.setItem('embers_user_name', pendingName)
-                    setStep('ready')
-                  }}
-                  className="flex-1 py-4 rounded-full text-white font-medium text-lg"
+                  onClick={handleNameConfirmYes}
+                  className="flex-1 py-4 rounded-full text-white font-medium text-lg transition-all"
                   style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
                 >
-                  Yes, that&apos;s me
+                  Yes, that's me
                 </button>
               </div>
             </motion.div>
           )}
 
-          {/* Ready Step */}
-          {step === 'ready' && (
+          {/* READY */}
+          {phase === 'ready' && !isEmberSpeaking && (
             <motion.div
               key="ready"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="flex-1 flex flex-col items-center justify-center text-center space-y-8"
+              className="mt-10 w-full"
             >
-              <div className="relative mb-4">
-                <FlameButton
-                  isListening={isListening}
-                  isSpeaking={isPlayingVoice}
-                  isProcessing={false}
-                  onClick={() => {}}
-                  size="medium"
-                />
-              </div>
-
-              {isPlayingVoice && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg text-[#f9f7f2]/60 font-serif animate-pulse">
-                  Ember is speaking...
-                </motion.p>
-              )}
-
-              <div className="space-y-4">
-                <h1 className="text-3xl font-serif font-bold text-[#f9f7f2]">
-                  You&apos;re all set, {name}!
-                </h1>
-                <p className="text-xl text-[#f9f7f2]/60 leading-relaxed max-w-md">
-                  Remember, there&apos;s no right or wrong way to share your stories.
-                </p>
-              </div>
-
-              {/* Voice instruction */}
-              <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-6 text-center max-w-sm">
-                <p className="text-[#f9f7f2]/70 text-lg">
-                  Say <span className="text-[#E86D48] font-semibold">&ldquo;yes&rdquo;</span> or{' '}
-                  <span className="text-[#E86D48] font-semibold">&ldquo;start&rdquo;</span> when ready
-                </p>
-                <p className="text-[#f9f7f2]/50 text-sm mt-2">
-                  Or tap the button below
-                </p>
-              </div>
-
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-3 max-w-sm">
-                <h2 className="font-semibold text-lg text-[#f9f7f2]">A few tips:</h2>
-                <ul className="space-y-2 text-[#f9f7f2]/70">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#E86D48]">•</span>
-                    Take your time - there&apos;s no rush
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#E86D48]">•</span>
-                    Pause whenever you need to think
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#E86D48]">•</span>
-                    I&apos;ll check in if you go quiet
-                  </li>
-                </ul>
-              </div>
-
               <button
                 onClick={handleStart}
-                disabled={isPlayingVoice}
-                className="w-full max-w-sm py-4 rounded-full text-white font-medium text-lg disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
+                className="w-full py-5 rounded-full text-white font-medium text-xl transition-all hover:scale-105"
+                style={{
+                  background: 'linear-gradient(135deg, #E86D48, #c45a3a)',
+                  boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)'
+                }}
               >
-                Start My First Story
+                Let's share a story
               </button>
+              <p className="text-center text-[#f9f7f2]/40 text-sm mt-4">
+                Or just say "let's go"
+              </p>
+            </motion.div>
+          )}
+
+          {/* STARTING */}
+          {phase === 'starting' && (
+            <motion.div
+              key="starting"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-10 text-center"
+            >
+              <div className="w-8 h-8 border-2 border-[#E86D48] border-t-transparent rounded-full animate-spin mx-auto" />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
+      {/* Listening Indicator */}
+      <AnimatePresence>
+        {isListening && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
+          >
+            <div className="bg-[#1a1714] border border-[#E86D48]/30 rounded-2xl px-6 py-3 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-[#f9f7f2]/80 text-sm font-medium">Listening...</span>
+              </div>
+              {transcript && (
+                <p className="text-[#f9f7f2]/50 text-sm mt-2 text-center max-w-xs">
+                  "{transcript}"
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <audio ref={audioRef} className="hidden" />
+
+      {/* Dev Reset Button - only visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={() => {
+            localStorage.removeItem('embers_user_name')
+            localStorage.removeItem('embers_conversation_draft')
+            localStorage.removeItem('embers_local_stories')
+            localStorage.removeItem('embers_interests')
+            sessionStorage.removeItem('embers_intro_played')
+            window.location.reload()
+          }}
+          className="fixed bottom-4 right-4 px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded-lg border border-red-500/30 transition-colors z-50"
+        >
+          Reset (Dev)
+        </button>
+      )}
     </div>
   )
 }

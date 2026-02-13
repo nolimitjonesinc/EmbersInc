@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 import { polishNarrative, expandStory } from '@/lib/services/narrativeGenerator'
+import { checkRateLimit } from '@/lib/auth/rateLimit'
 
 export const runtime = 'nodejs'
 
@@ -25,6 +26,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // Rate limit — ghostwriter calls OpenAI and is expensive
+    const rateCheck = checkRateLimit(`user:${user.id}`, true)
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Please wait a moment before trying again.' },
+        { status: 429 }
       )
     }
 

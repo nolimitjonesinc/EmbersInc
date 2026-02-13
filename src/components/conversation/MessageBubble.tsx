@@ -31,7 +31,7 @@ export function MessageBubble({ message, onPlayAudio }: MessageBubbleProps) {
         {!isUser && (
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🔥</span>
-            <span className="text-sm font-medium text-ember-orange">Ember</span>
+            <span className="text-sm font-medium text-ember-orange">Embers</span>
           </div>
         )}
 
