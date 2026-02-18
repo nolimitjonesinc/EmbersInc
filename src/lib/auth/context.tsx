@@ -32,7 +32,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const supabase = getSupabaseBrowserClient()
       const { data, error } = await supabase
-        .from('users')
+        .from('embers_users')
         .select('*')
         .eq('id', userId)
         .single()

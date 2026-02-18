@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         const periodEnd = (sub as any).current_period_end as number;
 
         const { error } = await supabase
-          .from('users')
+          .from('embers_users')
           .update({
             subscription_tier: 'premium',
             stripe_customer_id: customerId,
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         const tier = isActive ? 'premium' : 'free';
 
         const { error } = await supabase
-          .from('users')
+          .from('embers_users')
           .update({
             subscription_tier: tier,
             subscription_expires_at: new Date(sub.current_period_end * 1000).toISOString(),
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
         const customerId = sub.customer as string;
 
         const { error } = await supabase
-          .from('users')
+          .from('embers_users')
           .update({
             subscription_tier: 'free',
             subscription_expires_at: null,

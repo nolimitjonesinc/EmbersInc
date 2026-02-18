@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const supabase = await getSupabaseServerClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: profile } = await (supabase as any)
-      .from('users')
+      .from('embers_users')
       .select('stripe_customer_id')
       .eq('id', user.id)
       .single();
