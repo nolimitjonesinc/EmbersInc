@@ -7,6 +7,7 @@ import { userStyleService } from '@/lib/services/userStyleService';
 import { ConversationMemory } from '@/lib/memory/ConversationMemory';
 import { extractMemories } from '@/lib/memory/memoryExtractor';
 import { getPromptsForInterests, getRandomWarmPrompt } from '@/lib/prompts/promptSelector';
+import { ERROR_MESSAGES } from '@/lib/errors/messages';
 
 /**
  * Conversation Hook
@@ -148,7 +149,11 @@ export function useConversation(): UseConversationReturn {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const statusMessage = errorData?.error || `Server error (${response.status})`;
+        throw new Error(statusMessage);
+      }
 
       const data = await response.json();
 
@@ -166,8 +171,16 @@ export function useConversation(): UseConversationReturn {
       extractMemories(content, data.message, conversationMemoryRef.current);
 
       return data.message;
-    } catch {
-      setError('Something went wrong. Please try again.');
+    } catch (err) {
+      console.error('[Chat] Send message failed:', err);
+      if (err instanceof TypeError) {
+        // Network/fetch failure (no response at all)
+        setError(ERROR_MESSAGES.network);
+      } else if (err instanceof Error && err.message.includes('429')) {
+        setError(ERROR_MESSAGES.tooManyRequests);
+      } else {
+        setError(ERROR_MESSAGES.generic);
+      }
       return null;
     } finally {
       setIsProcessing(false);

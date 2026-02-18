@@ -251,28 +251,37 @@ export default function ConversationPage() {
           setTimeout(() => startListening(), 600);
         }
       },
+      onError: () => {
+        console.error('[TTS] Voice prompt failed — text already visible in messages');
+        setTtsFailureNotice(ERROR_MESSAGES.ttsFailed);
+        setTimeout(() => setTtsFailureNotice(null), 4000);
+        if (isSupported && !useWhisperFallback) {
+          setTimeout(() => startListening(), 600);
+        }
+      },
     });
   }, [tts, conversation.isProcessing, isSupported, useWhisperFallback, startListening]);
 
   // === Auto-save hook ===
   const handleAutoSave = useCallback(async () => {
     if (conversation.messages.length < 2) return;
-    const draft = {
-      id: `draft-${Date.now()}`,
-      messages: conversation.messages,
-      savedAt: new Date().toISOString(),
-      userName: localStorage.getItem('embers_user_name') || '',
-    };
-    localStorage.setItem('embers_conversation_draft', JSON.stringify(draft));
+    saveDraftToLocalStorageRef.current();
   }, [conversation.messages]);
+
+  // Use a ref to break the circular dependency: handleAutoSave -> saveDraftToLocalStorage -> hook(handleAutoSave)
+  const saveDraftToLocalStorageRef = useRef<() => void>(() => {});
 
   const {
     resetSilence, startSilenceTracking, stopSilenceTracking, clearDraft,
+    saveDraftToLocalStorage,
   } = useVoiceGuidedAutoSave(conversation.messages, {
     onPlayVoice: playVoicePrompt,
     onAutoSave: handleAutoSave,
     enabled: conversation.messages.length >= 2 && !tts.isSpeaking && !conversation.isProcessing,
   });
+
+  // Keep ref in sync so handleAutoSave can call saveDraftToLocalStorage without circular deps
+  useEffect(() => { saveDraftToLocalStorageRef.current = saveDraftToLocalStorage; }, [saveDraftToLocalStorage]);
 
   // === Keyboard shortcuts ===
   useEffect(() => {
@@ -386,6 +395,7 @@ export default function ConversationPage() {
         if (isSupported) setTimeout(() => startListening(), 600);
       },
       onError: () => {
+        console.error('[TTS] Voice introduction failed');
         // Retry once, then fall back to text-only
         if (introRetryCountRef.current < 1) {
           introRetryCountRef.current++;
@@ -411,7 +421,9 @@ export default function ConversationPage() {
     try {
       const draftStr = localStorage.getItem('embers_conversation_draft');
       if (draftStr) {
-        const draft = JSON.parse(draftStr);
+        const parsed = JSON.parse(draftStr);
+        // Handle both dualStorage format ({ data: { messages, ... } }) and legacy format ({ messages, ... })
+        const draft = parsed.data || parsed;
         if (draft.messages && draft.messages.length >= 2) return;
       }
     } catch (err) {
@@ -440,7 +452,14 @@ export default function ConversationPage() {
           setTimeout(() => { resetDraftRecoveryTranscript(); startDraftRecoveryListening(); }, 500);
         }
       },
-      onError: () => { setIsPlayingDraftRecoveryVoice(false); },
+      onError: () => {
+        console.error('[TTS] Draft recovery voice failed — activating voice commands as fallback');
+        setIsPlayingDraftRecoveryVoice(false);
+        // Still activate voice commands so user can respond via speech or buttons
+        if (isDraftRecoverySupported) {
+          setTimeout(() => { resetDraftRecoveryTranscript(); startDraftRecoveryListening(); }, 500);
+        }
+      },
     });
   }, [hasPlayedDraftRecoveryVoice, isPlayingDraftRecoveryVoice, tts, isDraftRecoverySupported, resetDraftRecoveryTranscript, startDraftRecoveryListening]);
 
@@ -473,6 +492,7 @@ export default function ConversationPage() {
           }
         },
         onError: () => {
+          console.error('[TTS] Response playback failed — text fallback shown');
           // Show text fallback notice — the response text is already in messages
           setTtsFailureNotice(ERROR_MESSAGES.ttsFailed);
           setTimeout(() => setTtsFailureNotice(null), 4000);

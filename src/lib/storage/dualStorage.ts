@@ -2,8 +2,7 @@
  * Dual storage: localStorage (instant) + Supabase (synced).
  *
  * Saves to localStorage immediately for zero-latency UX,
- * then syncs to Supabase in the background. Handles offline
- * gracefully — queues sync attempts and retries when back online.
+ * then syncs to Supabase in the background.
  *
  * Inspired by Loomiverse PsychologyStorage + cloudStorage patterns.
  */
@@ -21,11 +20,8 @@ interface StorageEntry<T> {
   syncedAt?: string
 }
 
-const SYNC_QUEUE_KEY = 'embers_sync_queue'
-const MAX_QUEUE_SIZE = 10
-
 /**
- * Save data to localStorage immediately, queue Supabase sync.
+ * Save data to localStorage immediately.
  */
 export function saveWithSync<T>(
   key: string,
@@ -37,7 +33,7 @@ export function saveWithSync<T>(
     updatedAt: new Date().toISOString(),
   }
 
-  // 1. Save to localStorage immediately
+  // Save to localStorage immediately
   try {
     localStorage.setItem(key, JSON.stringify(entry))
   } catch (err) {
@@ -46,14 +42,12 @@ export function saveWithSync<T>(
     return
   }
 
-  // 2. Queue for Supabase sync
-  queueSync(key)
   callbacks?.onSyncStatusChange?.('pending')
 }
 
 /**
- * Load data, preferring localStorage (instant) with Supabase fallback.
- * If both exist, most recent timestamp wins.
+ * Load data from localStorage.
+ * Returns null if no data exists or if stored data is corrupted.
  */
 export function loadLocal<T>(key: string): { data: T; updatedAt: Date } | null {
   try {
@@ -66,7 +60,7 @@ export function loadLocal<T>(key: string): { data: T; updatedAt: Date } | null {
       updatedAt: new Date(entry.updatedAt),
     }
   } catch (err) {
-    console.warn(`[DualStorage] Failed to parse localStorage key "${key}":`, err)
+    console.error(`[DualStorage] Failed to parse localStorage key "${key}" — data may be corrupted:`, err)
     return null
   }
 }
@@ -115,111 +109,10 @@ export function clearWithSync(
   clearFromCloud?: () => Promise<void>
 ): void {
   localStorage.removeItem(key)
-  removeSyncQueueEntry(key)
 
   if (clearFromCloud) {
     clearFromCloud().catch((err) => {
       console.error('[DualStorage] Cloud clear failed:', err)
     })
-  }
-}
-
-// --- Sync queue management ---
-
-function queueSync(key: string): void {
-  try {
-    const queue: string[] = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]')
-
-    // Dedup
-    if (!queue.includes(key)) {
-      queue.push(key)
-    }
-
-    // Cap queue size to prevent infinite growth
-    while (queue.length > MAX_QUEUE_SIZE) {
-      queue.shift()
-    }
-
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue))
-  } catch (err) {
-    console.warn('[DualStorage] Sync queue update failed:', err)
-  }
-}
-
-function removeSyncQueueEntry(key: string): void {
-  try {
-    const queue: string[] = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]')
-    const filtered = queue.filter((k) => k !== key)
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(filtered))
-  } catch (err) {
-    console.warn('[DualStorage] Sync queue entry removal failed:', err)
-  }
-}
-
-/**
- * Process the sync queue — call this periodically or on online event.
- * Provide a syncFn that takes a key and syncs that item to Supabase.
- */
-export async function processSyncQueue(
-  syncFn: (key: string) => Promise<boolean>,
-  callbacks?: DualStorageCallbacks
-): Promise<void> {
-  try {
-    const queue: string[] = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]')
-    if (queue.length === 0) return
-
-    const remaining: string[] = []
-
-    for (const key of queue) {
-      try {
-        const success = await syncFn(key)
-        if (!success) remaining.push(key)
-      } catch (err) {
-        console.warn(`[DualStorage] Sync failed for key "${key}":`, err)
-        remaining.push(key)
-      }
-    }
-
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(remaining))
-
-    if (remaining.length === 0) {
-      callbacks?.onSyncStatusChange?.('synced')
-    } else {
-      callbacks?.onSyncStatusChange?.('error')
-    }
-  } catch (err) {
-    console.warn('[DualStorage] Sync queue processing failed:', err)
-    callbacks?.onSyncStatusChange?.('error')
-  }
-}
-
-/**
- * Set up online/offline listeners for automatic sync retry.
- * Returns a cleanup function.
- */
-export function setupOnlineSync(
-  syncFn: (key: string) => Promise<boolean>,
-  callbacks?: DualStorageCallbacks
-): () => void {
-  const handleOnline = () => {
-    callbacks?.onSyncStatusChange?.('pending')
-    processSyncQueue(syncFn, callbacks)
-  }
-
-  const handleOffline = () => {
-    callbacks?.onSyncStatusChange?.('offline')
-  }
-
-  window.addEventListener('online', handleOnline)
-  window.addEventListener('offline', handleOffline)
-
-  // Check current state
-  if (!navigator.onLine) {
-    callbacks?.onSyncStatusChange?.('offline')
-  }
-
-  return () => {
-    window.removeEventListener('online', handleOnline)
-    window.removeEventListener('offline', handleOffline)
   }
 }

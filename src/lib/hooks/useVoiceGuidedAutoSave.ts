@@ -124,16 +124,24 @@ export function useVoiceGuidedAutoSave(
   const hasSpokenSaveOfferRef = useRef(false);
   const hasAutoSavedRef = useRef(false);
 
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('pending');
   const DRAFT_KEY = 'embers_conversation_draft';
+
+  // Stable draft ID for the session — generated once, not on every save
+  const draftIdRef = useRef<string>(`draft-${Date.now()}`);
+
+  // Ref to track current messages without causing effect teardowns
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   // Save draft via dualStorage (localStorage instant + Supabase queued)
   const saveDraftToLocalStorage = useCallback(() => {
-    if (messages.length < 2) return;
+    const currentMessages = messagesRef.current;
+    if (currentMessages.length < 2) return;
 
     const draft = {
-      id: `draft-${Date.now()}`,
-      messages,
+      id: draftIdRef.current,
+      messages: currentMessages,
       savedAt: new Date().toISOString(),
       userName: localStorage.getItem('embers_user_name') || '',
     };
@@ -149,17 +157,18 @@ export function useVoiceGuidedAutoSave(
       lastSavedAt: new Date(),
       draftId: draft.id,
     }));
-  }, [messages]);
+  }, []);
 
   // Save draft to Supabase (server-side persistence)
   const saveDraftToSupabase = useCallback(async () => {
-    if (messages.length < 2 || !enableSupabaseDrafts) return;
+    const currentMessages = messagesRef.current;
+    if (currentMessages.length < 2 || !enableSupabaseDrafts) return;
 
     try {
       const response = await fetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ messages: currentMessages }),
       });
       if (response.ok) {
         setSyncStatus('synced');
@@ -171,7 +180,7 @@ export function useVoiceGuidedAutoSave(
       setSyncStatus(navigator.onLine ? 'error' : 'offline');
       console.warn('[AutoSave] Supabase draft save failed (saved locally):', err);
     }
-  }, [messages, enableSupabaseDrafts]);
+  }, [enableSupabaseDrafts]);
 
   // Load draft from Supabase
   const loadDraftFromSupabase = useCallback(async (): Promise<{ messages: Message[]; savedAt: Date } | null> => {
@@ -281,17 +290,20 @@ export function useVoiceGuidedAutoSave(
     silenceStartRef.current = null;
   }, []);
 
-  // Set up auto-draft saving
+  // Save immediately to localStorage when messages change (fast path)
   useEffect(() => {
     if (!enabled || messages.length < 2) return;
-
-    // Save immediately when messages change (localStorage only - fast)
     saveDraftToLocalStorage();
+  }, [enabled, messages, saveDraftToLocalStorage]);
 
-    // Set up interval for periodic saves (includes Supabase - slower, debounced)
+  // Periodic Supabase sync — separate effect so it doesn't tear down on every message
+  useEffect(() => {
+    if (!enabled) return;
+
     draftTimerRef.current = setInterval(() => {
+      if (messagesRef.current.length < 2) return;
       saveDraftToLocalStorage();
-      saveDraftToSupabase(); // Also save to server
+      saveDraftToSupabase();
     }, AUTO_DRAFT_INTERVAL);
 
     return () => {
@@ -299,7 +311,7 @@ export function useVoiceGuidedAutoSave(
         clearInterval(draftTimerRef.current);
       }
     };
-  }, [enabled, messages, saveDraftToLocalStorage, saveDraftToSupabase]);
+  }, [enabled, saveDraftToLocalStorage, saveDraftToSupabase]);
 
   // Cleanup on unmount
   useEffect(() => {
