@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { AuthGate } from '@/components/subscription/AuthGate';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 
 interface SessionEndingProps {
   userName: string;
@@ -11,6 +13,14 @@ interface SessionEndingProps {
   themes?: string[];
   storyTitle?: string;
   conversationSummary?: string;
+  /** Whether to show the auth gate (anonymous user at limit) */
+  showAuthGate?: boolean;
+  /** Whether to show the upgrade prompt (free user at limit) */
+  showUpgradePrompt?: boolean;
+  /** Current story count for the upgrade prompt */
+  storiesCount?: number;
+  /** Called when auth gate sign-up succeeds */
+  onAuthSuccess?: () => void;
 }
 
 // Therapeutic closing messages based on themes
@@ -134,7 +144,11 @@ export function SessionEnding({
   mentionedPeople = [],
   themes = [],
   storyTitle,
-  conversationSummary
+  conversationSummary,
+  showAuthGate = false,
+  showUpgradePrompt = false,
+  storiesCount = 0,
+  onAuthSuccess,
 }: SessionEndingProps) {
   const [showMessage, setShowMessage] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
@@ -233,31 +247,59 @@ export function SessionEnding({
           </p>
         </div>
 
-        {/* Action buttons */}
-        <div
-          className={`flex flex-col sm:flex-row gap-4 justify-center transition-all duration-1000 ${
-            showButtons ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-          }`}
-        >
-          <button
-            onClick={onNewStory}
-            className="px-8 py-4 rounded-full text-white transition-all hover:shadow-lg"
-            style={{
-              background: 'linear-gradient(135deg, #E86D48, #c45a3a)',
-              boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)'
-            }}
+        {/* Auth gate for anonymous users at limit */}
+        {showAuthGate && (
+          <div
+            className={`transition-all duration-1000 ${
+              showEnrichment ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
           >
-            Share Another Memory
-          </button>
-          {storyId && (
-            <Link
-              href="/life-book"
-              className="px-8 py-4 rounded-full border border-white/20 text-[#f9f7f2]/70 hover:bg-white/5 hover:border-white/30 transition-all"
+            <AuthGate
+              userName={userName}
+              storyTitle={storyTitle}
+              onAuthSuccess={onAuthSuccess || (() => {})}
+            />
+          </div>
+        )}
+
+        {/* Upgrade prompt for free users at limit */}
+        {showUpgradePrompt && (
+          <div
+            className={`transition-all duration-1000 ${
+              showEnrichment ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            <UpgradePrompt storiesCount={storiesCount} userName={userName} />
+          </div>
+        )}
+
+        {/* Action buttons — hidden when auth gate or upgrade prompt is showing */}
+        {!showAuthGate && !showUpgradePrompt && (
+          <div
+            className={`flex flex-col sm:flex-row gap-4 justify-center transition-all duration-1000 ${
+              showButtons ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            <button
+              onClick={onNewStory}
+              className="px-8 py-4 rounded-full text-white transition-all hover:shadow-lg"
+              style={{
+                background: 'linear-gradient(135deg, #E86D48, #c45a3a)',
+                boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)'
+              }}
             >
-              View Life Book
-            </Link>
-          )}
-        </div>
+              Share Another Memory
+            </button>
+            {storyId && (
+              <Link
+                href="/life-book"
+                className="px-8 py-4 rounded-full border border-white/20 text-[#f9f7f2]/70 hover:bg-white/5 hover:border-white/30 transition-all"
+              >
+                View Life Book
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Edit story link */}
         {storyId && (

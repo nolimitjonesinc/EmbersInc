@@ -17,6 +17,7 @@ import { useStoryPersistence } from '@/lib/hooks/useStoryPersistence';
 import { Message } from '@/types';
 import { userStyleService } from '@/lib/services/userStyleService';
 import { ERROR_MESSAGES } from '@/lib/errors/messages';
+import { useSubscription, getLocalStoryCount } from '@/lib/subscription/useSubscription';
 
 // --- Constants ---
 
@@ -86,6 +87,7 @@ export default function ConversationPage() {
   const conversation = useConversation();
   const tts = useTTSPlayback();
   const story = useStoryPersistence();
+  const subscription = useSubscription();
 
   // === Page-level state ===
   const [inputText, setInputText] = useState('');
@@ -607,6 +609,9 @@ export default function ConversationPage() {
   // === Session ending ===
   if (story.showSessionEnding) {
     const style = userStyleService.getStyle();
+    const currentCount = subscription.isAuthenticated
+      ? story.savedStoriesCount
+      : getLocalStoryCount();
     return (
       <SessionEnding
         userName={conversation.userName}
@@ -616,6 +621,10 @@ export default function ConversationPage() {
         themes={Object.keys(style.commonThemes).slice(0, 5)}
         conversationSummary={story.conversationSummary || undefined}
         onNewStory={handleNewConversation}
+        showAuthGate={subscription.shouldShowAuthGate(currentCount)}
+        showUpgradePrompt={subscription.shouldShowUpgradePrompt(currentCount)}
+        storiesCount={currentCount}
+        onAuthSuccess={() => window.location.reload()}
       />
     );
   }

@@ -17,6 +17,9 @@ export interface Database {
           avatar_url: string | null
           preferences: Json | null
           communication_style: string | null
+          subscription_tier: 'free' | 'premium'
+          stripe_customer_id: string | null
+          subscription_expires_at: string | null
           created_at: string
           updated_at: string
         }
@@ -27,6 +30,9 @@ export interface Database {
           avatar_url?: string | null
           preferences?: Json | null
           communication_style?: string | null
+          subscription_tier?: 'free' | 'premium'
+          stripe_customer_id?: string | null
+          subscription_expires_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -37,6 +43,9 @@ export interface Database {
           avatar_url?: string | null
           preferences?: Json | null
           communication_style?: string | null
+          subscription_tier?: 'free' | 'premium'
+          stripe_customer_id?: string | null
+          subscription_expires_at?: string | null
           created_at?: string
           updated_at?: string
         }
