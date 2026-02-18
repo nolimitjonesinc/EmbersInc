@@ -1,7 +1,7 @@
 # Documentation & Rules
 
 > Source: `created by Claude Code architecture audit`
-> Progress: 9/12 tasks done
+> Progress: 12/12 tasks done ✓
 
 ## Tasks
 
@@ -26,7 +26,16 @@
   - New getPersonasByCategory() function for UI organization
 - [x] Update chat/route.ts to use new system (removed duplicate therapeutic rules, simplified to user context only)
 
-### Integration Work (Pending)
-- [ ] Integrate EMOTIONAL_STATE_RESPONSES.md into chat API (detect emotional state, adjust response)
-- [ ] Integrate CHAPTER_CLASSIFICATION_GUIDE.md into themeClassifier (add edge case handling)
-- [ ] Implement archetype selection in onboarding UI (let users choose conversation style using getPersonasByCategory())
+### Integration Work (Completed)
+- [x] Integrate EMOTIONAL_STATE_RESPONSES.md into chat API (detect emotional state, adjust response)
+  - Created `src/lib/services/emotionalStateDetector.ts` — keyword-based detection of 7 emotional states
+  - Modified `src/app/api/chat/route.ts` to inject emotional state guidance into system prompt
+- [x] Integrate CHAPTER_CLASSIFICATION_GUIDE.md into themeClassifier (add edge case handling)
+  - Added priority-based algorithm (direct address > time markers > emotional tone > uncertainty > reflection)
+  - Added confidence thresholds: >70% auto-classify, 50-70% flag for confirmation, <50% ask user
+  - Added `needsConfirmation` and `secondaryChapter` fields to ClassificationResult
+  - Added 7 edge case disambiguation rules with contextual analysis
+- [x] Implement archetype selection in onboarding UI (let users choose conversation style using getPersonasByCategory())
+  - Added persona picker step between name-confirm and ready phases in onboarding
+  - 4 simplified archetype cards (warm friend, curious listener, wise grandparent, default)
+  - Saves choice to localStorage, conversation page reads and sends to chat API

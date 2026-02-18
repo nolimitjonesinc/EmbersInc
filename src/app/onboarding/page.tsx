@@ -14,13 +14,42 @@ import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands'
  * 2. Embers introduces herself and what the app is about
  * 3. Embers asks for name
  * 4. Embers confirms name
- * 5. Ready to share first story
+ * 5. User picks a conversation style (persona)
+ * 6. Ready to share first story
  *
  * No interests selection - Embers uses sensible defaults.
  * No login required - stories save locally first.
  */
 
-type Phase = 'tap-to-start' | 'introduction' | 'ask-name' | 'confirm-name' | 'ready' | 'starting'
+type Phase = 'tap-to-start' | 'introduction' | 'ask-name' | 'confirm-name' | 'choose-style' | 'ready' | 'starting'
+
+// Simplified archetype options for elderly users (4 choices, not 9)
+const STYLE_OPTIONS = [
+  {
+    id: 'warmWitness',
+    label: 'Like a warm friend',
+    description: 'Empathetic and safe',
+    icon: '💛',
+  },
+  {
+    id: 'curiousCompanion',
+    label: 'Like a curious listener',
+    description: 'Simple and easy',
+    icon: '🎙️',
+  },
+  {
+    id: 'wiseElder',
+    label: 'Like a wise grandparent',
+    description: 'Gentle and nurturing',
+    icon: '🌹',
+  },
+  {
+    id: 'ember',
+    label: 'Just be yourself, Embers',
+    description: 'Adapts to you',
+    icon: '🔥',
+  },
+] as const
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -67,6 +96,10 @@ export default function OnboardingPage() {
 
     confirmName: (name: string) => `I heard ${name}. Is that right? Say yes, or say your name again if I got it wrong.`,
 
+    chooseStyle: `One more thing — how would you like me to talk with you? Pick the style that feels most comfortable.`,
+
+    styleConfirm: `I love that. Let's get started.`,
+
     ready: (name: string) => `Wonderful to meet you, ${name}. Whenever you're ready to share your first story, just say "let's go" or tap the button. I'll be right here, listening.`,
 
     starting: (name: string) => `Here we go, ${name}. Let's capture some memories together.`,
@@ -77,6 +110,7 @@ export default function OnboardingPage() {
     'introduction': "I'm listening. Just say your name whenever you're ready.",
     'ask-name': "Take your time. Just say your name, or type it below.",
     'confirm-name': "Just say yes if that's right, or say your name again.",
+    'choose-style': "Just tap whichever one feels right. There's no wrong answer.",
     'ready': "Take your time. Just say 'let's go' when you're ready, or tap the flame.",
   }
   const idlePromptsRef = useRef(IDLE_PROMPTS)
@@ -253,6 +287,10 @@ export default function OnboardingPage() {
           // Dynamic - includes user's name
           speakEmber(DIALOGUE.confirmName(name))
           break
+        case 'choose-style':
+          // No voice listening needed — user taps a card
+          speakEmber(DIALOGUE.chooseStyle, false)
+          break
         case 'ready':
           // Dynamic - includes user's name
           speakEmber(DIALOGUE.ready(name))
@@ -324,7 +362,7 @@ export default function OnboardingPage() {
         if (isAffirmative(lower)) {
           stopListening()
           localStorage.setItem('embers_user_name', userName)
-          goToPhase('ready', { name: userName })
+          goToPhase('choose-style', { name: userName })
         } else if (isNegative(lower)) {
           stopListening()
           goToPhase('ask-name')
@@ -381,14 +419,14 @@ export default function OnboardingPage() {
       const name = typedName.trim()
       setUserName(name)
       localStorage.setItem('embers_user_name', name)
-      goToPhase('ready', { name })
+      goToPhase('choose-style', { name })
     }
   }
 
   const handleNameConfirmYes = () => {
     stopListening()
     localStorage.setItem('embers_user_name', userName)
-    goToPhase('ready', { name: userName })
+    goToPhase('choose-style', { name: userName })
   }
 
   const handleNameConfirmNo = () => {
@@ -396,6 +434,17 @@ export default function OnboardingPage() {
     setUserName('')
     setTypedName('')
     goToPhase('ask-name')
+  }
+
+  const handleStyleSelect = (personaId: string) => {
+    localStorage.setItem('embers_preferred_persona', personaId)
+    // Speak confirmation, then transition to ready
+    setEmberText(DIALOGUE.styleConfirm)
+    speakEmber(DIALOGUE.styleConfirm, false).then(() => {
+      setTimeout(() => {
+        goToPhase('ready', { name: userName })
+      }, 400)
+    })
   }
 
   const handleStart = () => {
@@ -561,6 +610,42 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
+          {/* CHOOSE STYLE */}
+          {phase === 'choose-style' && !isEmberSpeaking && (
+            <motion.div
+              key="choose-style"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mt-10 w-full"
+            >
+              <div className="grid grid-cols-1 gap-3">
+                {STYLE_OPTIONS.map((style) => (
+                  <motion.button
+                    key={style.id}
+                    onClick={() => handleStyleSelect(style.id)}
+                    whileTap={{ scale: 0.97 }}
+                    className="w-full text-left px-5 py-4 rounded-2xl border border-white/15 bg-white/5 hover:bg-[#E86D48]/10 hover:border-[#E86D48]/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-2xl" role="img" aria-hidden="true">
+                        {style.icon}
+                      </span>
+                      <div>
+                        <p className="text-lg text-[#f9f7f2]/90 font-serif group-hover:text-[#E86D48] transition-colors">
+                          {style.label}
+                        </p>
+                        <p className="text-sm text-[#f9f7f2]/40">
+                          {style.description}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {/* READY */}
           {phase === 'ready' && !isEmberSpeaking && (
             <motion.div
@@ -631,6 +716,7 @@ export default function OnboardingPage() {
         <button
           onClick={() => {
             localStorage.removeItem('embers_user_name')
+            localStorage.removeItem('embers_preferred_persona')
             localStorage.removeItem('embers_conversation_draft')
             localStorage.removeItem('embers_local_stories')
             localStorage.removeItem('embers_interests')

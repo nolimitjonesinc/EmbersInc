@@ -9,6 +9,7 @@ import {
   getPromptsForInterests,
   getGentleEncouragement
 } from '@/lib/prompts/promptSelector'
+import { detectEmotionalState } from '@/lib/services/emotionalStateDetector'
 import { allWarmPrompts } from '@/lib/prompts/warmEngagementPrompts'
 import { softAuth } from '@/lib/auth/getAuthContext'
 import { validateChatInput } from '@/lib/auth/validateChatInput'
@@ -91,16 +92,25 @@ function addUserContext(params: {
   basePrompt: string
   selectedInterests?: string[]
   memoryContext?: string
+  lastUserMessage?: string
   userContext?: {
     frequentlyMentionedPeople?: string[]
     preferredTimeframes?: string[]
     commonThemes?: string[]
   }
 }): string {
-  const { basePrompt, selectedInterests = [], memoryContext, userContext } = params
+  const { basePrompt, selectedInterests = [], memoryContext, lastUserMessage, userContext } = params
 
   // Build user-specific context additions
   const contextParts: string[] = []
+
+  // Emotional state detection — scan the last user message for emotional signals
+  if (lastUserMessage) {
+    const emotionalResult = detectEmotionalState(lastUserMessage)
+    if (emotionalResult) {
+      contextParts.push(`EMOTIONAL STATE DETECTED (${emotionalResult.state.toUpperCase()}): ${emotionalResult.guidance}`)
+    }
+  }
 
   // Memory system context (extracted from conversation — people, topics, emotions, questions asked)
   if (memoryContext && memoryContext.trim()) {
@@ -178,11 +188,15 @@ export async function POST(request: NextRequest) {
     const personaData = getPersona(persona)
     const basePrompt = getPersonaPrompt(persona, userName)
 
+    // Extract the last user message for emotional state detection
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content
+
     // Add user-specific context (core therapeutic rules are now in EMBER_CORE_IDENTITY)
     const systemPrompt = addUserContext({
       basePrompt,
       selectedInterests,
       memoryContext: body.memoryContext,
+      lastUserMessage,
       userContext: {
         frequentlyMentionedPeople,
         preferredTimeframes,

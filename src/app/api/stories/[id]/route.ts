@@ -51,17 +51,45 @@ export async function GET(
 
     // Check ownership (RLS should handle this, but double-check)
     if (story.user_id !== user.id) {
-      // Check if user has family access to this story
+      // Story must be published for family access
+      if (!story.is_published) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 403 }
+        )
+      }
+
+      // Check if requesting user and story owner share at least one family group.
+      // Both users must be active members of the SAME group.
+      // Step 1: Get all family groups the story owner belongs to
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: familyAccess } = await (supabase as any)
+      const { data: ownerGroups } = await (supabase as any)
+        .from('embers_family_members')
+        .select('family_group_id')
+        .eq('user_id', story.user_id)
+        .eq('status', 'active')
+
+      const ownerGroupIds = (ownerGroups as { family_group_id: string }[] | null)?.map(g => g.family_group_id) || []
+
+      if (ownerGroupIds.length === 0) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 403 }
+        )
+      }
+
+      // Step 2: Check if requesting user is an active member of any of those same groups
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: sharedGroups } = await (supabase as any)
         .from('embers_family_members')
         .select('family_group_id')
         .eq('user_id', user.id)
         .eq('status', 'active')
+        .in('family_group_id', ownerGroupIds)
 
-      const familyGroupIds = (familyAccess as { family_group_id: string }[] | null)?.map(f => f.family_group_id) || []
+      const sharedGroupIds = (sharedGroups as { family_group_id: string }[] | null) || []
 
-      if (!story.is_published || familyGroupIds.length === 0) {
+      if (sharedGroupIds.length === 0) {
         return NextResponse.json(
           { error: 'Unauthorized' },
           { status: 403 }

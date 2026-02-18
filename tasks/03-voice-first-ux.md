@@ -1,7 +1,7 @@
 # Voice-First UX
 
 > Source: `created by Claude Code session`
-> Progress: 3/8 tasks done
+> Progress: 4/9 tasks done
 
 ## Overview
 
@@ -16,6 +16,11 @@ Ember acts as a persistent conversational guide throughout the app.
   - No interests selection (use sensible defaults)
   - No login required (save locally first)
   - Warm introduction explaining what Embers is
+- [x] Add persona/style selection step to onboarding
+  - 4 simplified archetype cards (warm friend, curious listener, wise grandparent, default)
+  - Saves choice to localStorage as `embers_preferred_persona`
+  - Conversation page reads preference and sends to chat API
+  - Inserted between name-confirm and ready phases
 
 ### Local Storage (Completed)
 - [x] Enable story saving without authentication

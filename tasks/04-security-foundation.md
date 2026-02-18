@@ -1,7 +1,7 @@
 # Security Foundation
 
 > Source: `created by Claude Code full audit + Loomiverse reference analysis`
-> Progress: 9/10 tasks done (1 deferred to Sprint 2)
+> Progress: 10/10 tasks done
 > Sprint: 1 (BLOCKING — nothing else should ship until this is done)
 > Inspired by: Loomiverse `api/_usage.js`, `src/lib/supabase.js`
 
@@ -64,8 +64,8 @@ Every API route (chat, tts, transcribe, photos/analyze, audio/upload) has **zero
   - Logs loud warning and redirects to login instead of passing through
 - [x] Remove production dev-reset button from onboarding page
   - Now gated behind `process.env.NODE_ENV === 'development'`
-- [ ] Fix family access logic: check if story owner is in SAME family group, not just ANY group
-  - (Deferred — requires database query changes in stories/[id]/route.ts)
+- [x] Fix family access logic: check if story owner is in SAME family group, not just ANY group
+  - Fixed: now uses two-step query — first gets story owner's active family groups, then checks if requesting user is an active member of any of those same groups via `.in()`. Also requires `is_published = true` before any family access is considered.
 
 ### Silent Failure Fixes (from review agents)
 - [x] Fix bare `catch {}` in getAuthContext.ts — now logs errors instead of silently degrading

@@ -59,6 +59,7 @@ export function useConversation(): UseConversationReturn {
     commonThemes: [],
   });
   const [starterPrompt, setStarterPrompt] = useState('');
+  const [preferredPersona, setPreferredPersona] = useState('');
 
   const conversationMemoryRef = useRef(new ConversationMemory());
 
@@ -66,6 +67,9 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => {
     const storedName = localStorage.getItem('embers_user_name');
     if (storedName) setUserName(storedName);
+
+    const storedPersona = localStorage.getItem('embers_preferred_persona');
+    if (storedPersona) setPreferredPersona(storedPersona);
 
     const interests = interestService.get();
     setSelectedInterests(interests);
@@ -133,6 +137,7 @@ export function useConversation(): UseConversationReturn {
         body: JSON.stringify({
           messages: [...messages, userMessage],
           userName,
+          persona: preferredPersona || undefined,
           isFirstMessage: messages.filter(m => m.role === 'user').length === 0,
           selectedInterests,
           isReturningUser: userContext.isReturningUser,
@@ -167,7 +172,7 @@ export function useConversation(): UseConversationReturn {
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, messages, userName, selectedInterests, userContext.isReturningUser]);
+  }, [isProcessing, messages, userName, preferredPersona, selectedInterests, userContext.isReturningUser]);
 
   const resetConversation = useCallback(() => {
     setMessages([]);
