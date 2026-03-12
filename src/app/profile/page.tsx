@@ -21,6 +21,12 @@ export default function ProfilePage() {
     daysActive: 0,
   });
 
+  // Invite link state
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
   useEffect(() => {
     // Load settings from localStorage
     const storedName = localStorage.getItem('embers_user_name');
@@ -118,6 +124,43 @@ export default function ProfilePage() {
   const showSaveMessage = () => {
     setSaveMessage('Settings saved!');
     setTimeout(() => setSaveMessage(''), 2000);
+  };
+
+  const handleGetInviteLink = async () => {
+    setInviteLoading(true);
+    setInviteError('');
+    try {
+      const res = await fetch('/api/family/invite-link');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setInviteError(data.error || 'Could not generate invite link.');
+        return;
+      }
+      const data = await res.json();
+      setInviteLink(`${window.location.origin}/ask/${data.inviteCode}`);
+    } catch {
+      setInviteError('Could not generate invite link. Please try again.');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleCopyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = inviteLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    }
   };
 
   return (
@@ -346,18 +389,44 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Family sharing teaser */}
-        <Card className="border-2 border-dashed border-ember-orange/30">
-          <CardContent className="pt-6 text-center">
-            <span className="text-4xl mb-4 block">👨‍👩‍👧‍👦</span>
-            <h3 className="text-xl font-bold mb-2">Family Sharing Coming Soon!</h3>
+        {/* Family Questions */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span>👨‍👩‍👧‍👦</span>
+              Family Questions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <p className="text-gray-600 mb-4">
-              Soon you&apos;ll be able to invite family members to read your stories and add their
-              own memories.
+              Share a link so family and friends can ask you questions. Anyone with this link can
+              send you a question. You&apos;ll hear it in your next conversation.
             </p>
-            <Button variant="outline" disabled>
-              Invite Family Members
-            </Button>
+
+            {inviteLink ? (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={inviteLink}
+                    readOnly
+                    className="flex-1 text-sm"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <Button onClick={handleCopyInviteLink}>
+                    {inviteCopied ? 'Copied!' : 'Copy'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button onClick={handleGetInviteLink} disabled={inviteLoading}>
+                {inviteLoading ? 'Generating...' : 'Get Invite Link'}
+              </Button>
+            )}
+
+            {inviteError && (
+              <p className="text-red-500 text-sm mt-3">{inviteError}</p>
+            )}
           </CardContent>
         </Card>
       </main>

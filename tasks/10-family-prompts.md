@@ -1,43 +1,122 @@
-# Family Prompts & Shared Memories
+# Family Prompts — MVP Build
 
-> Source: `Danny's idea — Feb 2026`
-> Progress: 0/8 tasks done
-> Sprint: TBD (after monetization setup complete)
+> Source: `Danny's idea — Feb 2026, PRD created Mar 2026`
+> Progress: 20/20 tasks done
+> Sprint: 8 (Family Prompts MVP)
+> PRD: `docs/PRD-FAMILY-PROMPTS.md`
 
 ## Why This Matters
 
-Families are the #1 reason people preserve memories. Right now, the elderly user talks to Embers alone. But family members have questions they'd love answered and photos they want stories behind. This feature turns Embers from a solo journaling tool into a family memory machine — and it's a massive differentiator from competitors.
+Families are the #1 reason people preserve memories. This feature turns Embers from a solo journaling tool into a family legacy machine. It's the viral loop: family submits question → grandma answers → family hears the story → shares with more family → they ask questions too.
 
-## The Vision
-
-Family member logs in → sees their loved one's profile → submits a question or uploads a photo → next time the elderly user opens Embers, those prompts are waiting: "Your daughter Sarah sent you a photo and wants to hear the story behind it."
+---
 
 ## Tasks
 
-### Database & API
-- [ ] Create `embers_family_prompts` table (family_member_id, target_user_id, type: question|photo, content, photo_url, status: pending|answered|skipped, story_id)
-- [ ] API route: POST /api/family/prompts — family member submits a question or photo
-- [ ] API route: GET /api/family/prompts — elderly user fetches pending prompts on conversation start
-- [ ] API route: PATCH /api/family/prompts/[id] — mark prompt as answered (link to story)
+### Phase A: Database & Types (Foundation)
 
-### Family Member Experience
-- [ ] Family dashboard page — see loved one's stories, submit prompts, upload photos
-- [ ] Photo upload flow — family member uploads image with optional question ("What's happening in this photo?")
+- [x] Create SQL migration `supabase/migrations/002_family_prompts.sql`:
+  - `embers_family_prompts` table with all fields from PRD
+  - RLS policies: storyteller reads own prompts, authenticated family members create, submitter reads own
+  - Index on (target_user_id, status) for conversation-start queries
+  - Index on (family_group_id, created_at) for submission page
+- [x] Add `embers_family_prompts` to `src/lib/supabase/types.ts` (Row/Insert/Update + helper types)
+- [x] Add `FamilyPrompt` interface to `src/types/index.ts`
+- [x] Add nullable fields to `embers_stories` type: `prompted_by_name`, `prompted_by_relationship`, `family_prompt_id`
+- [x] Add `invite_code` generation utility to `src/lib/utils/inviteCode.ts` (nanoid-based, 12 chars)
 
-### Elderly User Experience
-- [ ] Prompt queue on conversation start — "Sarah wants to know about..." shown before opening question
-- [ ] Photo prompt integration — show the photo in conversation, Embers asks about it using Photo Detective analysis as context
+### Phase B: Curated Prompt Library (Content)
+
+- [x] Create `src/data/familyPrompts.ts` with full prompt library:
+  - By relationship: children, grandchildren, friends, spouses
+  - By theme: childhood, love, career, hard times, wisdom, fun
+  - Special packs: "Questions You're Afraid to Ask", "Photo Prompts", "Legacy Questions"
+  - 8-12 questions per category, each specific enough to trigger real stories
+  - Export as typed arrays with category/pack metadata
+
+### Phase C: API Routes (Backend)
+
+- [x] Create `src/app/api/family/prompts/route.ts`:
+  - POST: Submit prompt (guest via family invite link, or authenticated)
+  - GET: Fetch next pending prompt for storyteller (auth required, returns max 1)
+  - Rate limiting: 3/day guest, 10/day authenticated
+  - Input validation: content max 500 chars, sanitize
+- [x] Create `src/app/api/family/prompts/[id]/route.ts`:
+  - PATCH: Update status (answered/skipped/declined), link story_id
+  - Auth required (only storyteller can update their own prompts)
+- [x] Create `src/app/api/family/invite/[familyId]/route.ts`:
+  - GET: Return storyteller first name + family name (public, for submission page)
+  - Validates family group exists and is active
+- [x] Update `src/app/api/stories/route.ts` POST handler:
+  - Accept optional `family_prompt_id`, `prompted_by_name`, `prompted_by_relationship`
+  - On save with family_prompt_id: update prompt status to 'answered', link story_id
+
+### Phase D: Guest Submission Page (The Money Page)
+
+- [x] Create `src/app/ask/[familyId]/page.tsx`:
+  - Mobile-first, dark theme, warm and inviting
+  - Shows storyteller's first name: "Help Margaret preserve her memories"
+  - Name input + relationship dropdown
+  - Question textarea (500 char limit) with character counter
+  - "Need inspiration?" expandable section with curated prompt packs
+  - Pick-a-prompt: tap to auto-fill from curated library
+  - Submit button with loading state
+  - Success confirmation with optional email capture for notifications
+  - Error states: invalid link, full queue, rate limited
+  - NO account required — zero friction
+
+### Phase E: Conversation Integration (The Magic)
+
+- [x] Create `src/lib/hooks/useFamilyPrompts.ts`:
+  - Fetch pending prompt on conversation mount
+  - Expose: `pendingPrompt`, `acceptPrompt()`, `skipPrompt()`, `declinePrompt()`
+  - `markAnswered(storyId)` — called when story is saved
+- [x] Update `src/app/conversation/page.tsx`:
+  - Import and use `useFamilyPrompts` hook
+  - Modify `generateVoiceIntroduction()` to include family prompt when available
+  - Add family prompt acceptance/skip UI (simple buttons below the intro)
+  - Pass `family_prompt_id` and submitter info to story save flow
+  - Show "Asked by Emma" badge during conversation when answering a family prompt
+- [x] Update `src/lib/hooks/useStoryPersistence.ts`:
+  - Accept optional family prompt metadata in `saveStory()`
+  - Pass to API: `family_prompt_id`, `prompted_by_name`, `prompted_by_relationship`
+
+### Phase F: Polish & Story Display
+
+- [x] Update story display (stories page, life-book) to show "Asked by [name]" badge when `prompted_by_name` exists
+- [x] Add invite link generation to profile page:
+  - "Invite family to ask questions" button
+  - Generates/shows shareable link: `[domain]/ask/[familyId]`
+  - Copy-to-clipboard functionality
+- [x] Wire curated prompt library (`src/data/familyPrompts.ts`) into submission page (`src/app/ask/[familyId]/page.tsx`)
+- [x] Create simple email notification when prompted story is saved:
+  - `src/app/api/family/notify/route.ts`
+  - Sends to submitter email (if provided): "Margaret answered your question!"
+  - Uses Resend or similar (env var for API key)
+
+---
+
+## Acceptance Criteria
+
+- [x] Guest can submit a question at `/ask/[familyId]` with zero account creation
+- [x] Curated prompt library helps family members find great questions
+- [x] Storyteller hears family prompts woven into Ember's opening naturally
+- [x] Storyteller can accept, skip, or decline any prompt
+- [x] Answered stories are tagged with submitter info
+- [x] Invite link is shareable from profile page
+- [x] Rate limiting prevents abuse on guest submissions
+- [x] Dark theme, mobile-optimized, warm and inviting design throughout
+- [x] `npm run build` passes with zero errors
+
+## Known Issues / Follow-ups
+
+- `src/lib/prompt-library.ts` is a duplicate prompt file (from research agent) — unused, can be deleted
+- Email notification implemented via Resend — requires `RESEND_API_KEY` env var and verified `embersinc.org` domain in Resend dashboard
+- Rate limiter uses 60-second sliding window (existing infra), not a true daily limit — fine for MVP
+- The Supabase migration needs to be run against the actual database before testing end-to-end
 
 ## Dependencies
 
-- Sprint 6 (monetization) — family sharing is a premium feature
-- `embers_family_members` and `embers_family_groups` tables already exist
-- Photo Detective feature already exists (can analyze uploaded photos)
-- Auth system in place
-
-## Revenue Angle
-
-This is a premium-only feature. Families pay because:
-- They get a way to actively participate in memory preservation
-- The stories that come back are gold — specific, prompted, photo-triggered
-- It's the difference between "Grandma has a journaling app" and "Our family is building a legacy together"
+- Sprints 1-7 complete (auth, error handling, monetization all in place)
+- `family_groups` and `embers_family_members` tables already exist
+- Auth system (softAuth/requireAuth) ready to use

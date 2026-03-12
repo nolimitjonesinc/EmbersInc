@@ -41,6 +41,9 @@ export interface UseStoryPersistenceReturn {
       stopSessionRecording?: () => Promise<Blob | null>;
       sessionDuration?: number;
       isSessionRecording?: boolean;
+      familyPromptId?: string;
+      promptedByName?: string;
+      promptedByRelationship?: string;
     }
   ) => Promise<boolean>;
   /** Accept the recovered draft — returns the messages to restore */
@@ -126,6 +129,9 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
       stopSessionRecording?: () => Promise<Blob | null>;
       sessionDuration?: number;
       isSessionRecording?: boolean;
+      familyPromptId?: string;
+      promptedByName?: string;
+      promptedByRelationship?: string;
     }
   ): Promise<boolean> => {
     if (messages.length < 2) return false;
@@ -148,6 +154,9 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
           generateTitle: true,
           rawTranscript,
           conversationMessages: messages,
+          ...(options?.familyPromptId && { family_prompt_id: options.familyPromptId }),
+          ...(options?.promptedByName && { prompted_by_name: options.promptedByName }),
+          ...(options?.promptedByRelationship && { prompted_by_relationship: options.promptedByRelationship }),
         }),
       });
 

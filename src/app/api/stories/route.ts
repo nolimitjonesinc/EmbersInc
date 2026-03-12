@@ -16,6 +16,9 @@ interface CreateStoryRequest {
   generateTitle?: boolean
   rawTranscript?: string
   conversationMessages?: Message[]
+  family_prompt_id?: string
+  prompted_by_name?: string
+  prompted_by_relationship?: string
 }
 
 // GET /api/stories - List user's stories
@@ -93,6 +96,9 @@ export async function POST(request: NextRequest) {
       generateTitle = true,
       rawTranscript,
       conversationMessages,
+      family_prompt_id,
+      prompted_by_name,
+      prompted_by_relationship,
     } = body
 
     if (!content || content.trim().length === 0) {
@@ -145,6 +151,9 @@ export async function POST(request: NextRequest) {
       is_published: false,
       raw_transcript: rawTranscript || content,
       conversation_messages: conversationMessages || messages || [],
+      ...(family_prompt_id && { family_prompt_id }),
+      ...(prompted_by_name && { prompted_by_name }),
+      ...(prompted_by_relationship && { prompted_by_relationship }),
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,6 +169,62 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create story' },
         { status: 500 }
       )
+    }
+
+    // If this story was prompted by a family member, update the prompt status
+    if (family_prompt_id && story?.id) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('embers_family_prompts')
+          .update({ status: 'answered', story_id: story.id })
+          .eq('id', family_prompt_id)
+          .eq('target_user_id', user.id)
+      } catch (promptError) {
+        // Log but don't fail the story save
+        console.error('[Stories] Error updating family prompt status:', promptError)
+      }
+
+      // Fire-and-forget email notification to the family member who asked
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: promptData } = await (supabase as any)
+          .from('embers_family_prompts')
+          .select('submitter_email, submitter_name, submitter_relationship')
+          .eq('id', family_prompt_id)
+          .single()
+
+        if (promptData?.submitter_email) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: storyteller } = await (supabase as any)
+            .from('users')
+            .select('name')
+            .eq('id', user.id)
+            .single()
+
+          const storytellerName = storyteller?.name?.split(' ')[0] || 'Your loved one'
+
+          // Fire and forget — don't await, don't block the response
+          fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/family/notify`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-secret': process.env.INTERNAL_API_SECRET || process.env.RESEND_API_KEY || '',
+            },
+            body: JSON.stringify({
+              submitterEmail: promptData.submitter_email,
+              submitterName: promptData.submitter_name,
+              submitterRelationship: promptData.submitter_relationship,
+              storytellerName,
+              storyTitle: title,
+              storyId: story.id,
+            }),
+          }).catch(err => console.error('[Stories] Failed to send family notification:', err))
+        }
+      } catch (notifyError) {
+        // Never block story save for notification failures
+        console.error('[Stories] Error preparing family notification:', notifyError)
+      }
     }
 
     return NextResponse.json({

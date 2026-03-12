@@ -15,6 +15,7 @@ interface ApiStory {
   tags: string[];
   sentiment_score?: number;
   is_published: boolean;
+  prompted_by_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -217,13 +218,20 @@ export default function StoriesPage() {
                         </span>
                       ))}
                     </div>
-                    <p className="text-xs text-[#f9f7f2]/30">
-                      {new Date(story.created_at).toLocaleDateString('en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-[#f9f7f2]/30">
+                        {new Date(story.created_at).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </p>
+                      {story.prompted_by_name && (
+                        <span className="text-xs text-amber-300/70 flex items-center gap-1">
+                          Asked by {story.prompted_by_name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

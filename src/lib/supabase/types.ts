@@ -64,6 +64,9 @@ export interface Database {
           is_published: boolean
           created_at: string
           updated_at: string
+          prompted_by_name: string | null
+          prompted_by_relationship: string | null
+          family_prompt_id: string | null
         }
         Insert: {
           id?: string
@@ -78,6 +81,9 @@ export interface Database {
           is_published?: boolean
           created_at?: string
           updated_at?: string
+          prompted_by_name?: string | null
+          prompted_by_relationship?: string | null
+          family_prompt_id?: string | null
         }
         Update: {
           id?: string
@@ -92,6 +98,9 @@ export interface Database {
           is_published?: boolean
           created_at?: string
           updated_at?: string
+          prompted_by_name?: string | null
+          prompted_by_relationship?: string | null
+          family_prompt_id?: string | null
         }
       }
       embers_drafts: {
@@ -184,6 +193,59 @@ export interface Database {
           created_at?: string
         }
       }
+      embers_family_prompts: {
+        Row: {
+          id: string
+          family_group_id: string
+          submitter_id: string | null
+          target_user_id: string
+          submitter_name: string
+          submitter_relationship: string
+          submitter_email: string | null
+          type: 'question' | 'photo'
+          content: string
+          photo_url: string | null
+          status: 'pending' | 'offered' | 'answered' | 'skipped' | 'declined'
+          story_id: string | null
+          offered_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          family_group_id: string
+          submitter_id?: string | null
+          target_user_id: string
+          submitter_name: string
+          submitter_relationship: string
+          submitter_email?: string | null
+          type?: 'question' | 'photo'
+          content: string
+          photo_url?: string | null
+          status?: 'pending' | 'offered' | 'answered' | 'skipped' | 'declined'
+          story_id?: string | null
+          offered_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          family_group_id?: string
+          submitter_id?: string | null
+          target_user_id?: string
+          submitter_name?: string
+          submitter_relationship?: string
+          submitter_email?: string | null
+          type?: 'question' | 'photo'
+          content?: string
+          photo_url?: string | null
+          status?: 'pending' | 'offered' | 'answered' | 'skipped' | 'declined'
+          story_id?: string | null
+          offered_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
       photos: {
         Row: {
           id: string
@@ -256,3 +318,7 @@ export type FamilyMemberUpdate = Database['public']['Tables']['embers_family_mem
 export type Photo = Database['public']['Tables']['photos']['Row']
 export type PhotoInsert = Database['public']['Tables']['photos']['Insert']
 export type PhotoUpdate = Database['public']['Tables']['photos']['Update']
+
+export type FamilyPrompt = Database['public']['Tables']['embers_family_prompts']['Row']
+export type FamilyPromptInsert = Database['public']['Tables']['embers_family_prompts']['Insert']
+export type FamilyPromptUpdate = Database['public']['Tables']['embers_family_prompts']['Update']

@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const MAX_CONTENT_LENGTH = 10000 // 10k chars
+    if (content.length > MAX_CONTENT_LENGTH) {
+      return NextResponse.json(
+        { error: `Content is too long. Maximum ${MAX_CONTENT_LENGTH.toLocaleString()} characters.` },
+        { status: 400 }
+      )
+    }
+
     let result: { original: string; enhanced: string; changes?: string[] }
 
     if (mode === 'expand') {

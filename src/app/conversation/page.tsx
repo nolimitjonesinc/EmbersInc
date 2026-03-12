@@ -14,6 +14,7 @@ import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands';
 import { useTTSPlayback } from '@/lib/hooks/useTTSPlayback';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useStoryPersistence } from '@/lib/hooks/useStoryPersistence';
+import { useFamilyPrompts } from '@/lib/hooks/useFamilyPrompts';
 import { Message } from '@/types';
 import { userStyleService } from '@/lib/services/userStyleService';
 import { ERROR_MESSAGES } from '@/lib/errors/messages';
@@ -47,8 +48,16 @@ function generateVoiceIntroduction(
   userName?: string,
   isReturningUser?: boolean,
   mentionedPeople?: string[],
-  commonThemes?: string[]
+  commonThemes?: string[],
+  familyPrompt?: { submitterName: string; submitterRelationship: string; content: string } | null
 ): { greeting: string; question: string } {
+  // If there's a family prompt, use a special greeting
+  if (familyPrompt && userName) {
+    const greeting = `Welcome back, ${userName}. It's Embers. I have something special for you today.`;
+    const question = `Your ${familyPrompt.submitterRelationship} ${familyPrompt.submitterName} sent you a question. They want to know: "${familyPrompt.content}" Would you like to share that story, or would you prefer to talk about something else today?`;
+    return { greeting, question };
+  }
+
   if (isReturningUser && userName) {
     const returningGreetings = [
       `Welcome back, ${userName}. It's Embers. It's good to hear from you again.`,
@@ -88,6 +97,15 @@ export default function ConversationPage() {
   const tts = useTTSPlayback();
   const story = useStoryPersistence();
   const subscription = useSubscription();
+  const {
+    pendingPrompt,
+    isAnsweringFamilyPrompt,
+    acceptPrompt,
+    skipPrompt,
+    declinePrompt,
+    markAnswered,
+    acceptedPrompt,
+  } = useFamilyPrompts();
 
   // === Page-level state ===
   const [inputText, setInputText] = useState('');
@@ -369,7 +387,8 @@ export default function ConversationPage() {
         conversation.userName,
         conversation.userContext.isReturningUser,
         conversation.userContext.frequentlyMentionedPeople,
-        conversation.userContext.commonThemes
+        conversation.userContext.commonThemes,
+        pendingPrompt
       );
       fullIntroduction = `${greeting}\n\n${question}`;
     }
@@ -410,7 +429,7 @@ export default function ConversationPage() {
         if (isSupported) setTimeout(() => startListening(), 600);
       },
     });
-  }, [isPlayingIntro, tts, conversation, isSupported, startListening, startIdleNudgeTimer]);
+  }, [isPlayingIntro, tts, conversation, isSupported, startListening, startIdleNudgeTimer, pendingPrompt]);
 
   // Auto-start voice intro from onboarding
   useEffect(() => {
@@ -573,13 +592,19 @@ export default function ConversationPage() {
         stopSessionRecording: stopSessionRecording,
         sessionDuration,
         isSessionRecording,
+        ...(isAnsweringFamilyPrompt && acceptedPrompt ? {
+          familyPromptId: acceptedPrompt.id,
+          promptedByName: acceptedPrompt.submitterName,
+          promptedByRelationship: acceptedPrompt.submitterRelationship,
+        } : {}),
       });
       clearDraft();
     } catch (err) {
       conversation.setError(err instanceof Error ? err.message : 'Failed to save story.');
     }
   }, [conversation, story, tts, stopListening, stopSilenceTracking, clearDraft,
-      stopSessionRecording, sessionDuration, isSessionRecording]);
+      stopSessionRecording, sessionDuration, isSessionRecording,
+      isAnsweringFamilyPrompt, acceptedPrompt]);
 
   const handleNewConversation = useCallback(() => {
     conversation.resetConversation();
@@ -625,6 +650,13 @@ export default function ConversationPage() {
     }
   }, [draftRecoveryTranscript, isPlayingDraftRecoveryVoice, story.showDraftRecovery,
       isAffirmative, stopDraftRecoveryListening, handleRecoverDraft, handleDiscardDraft]);
+
+  // === Mark family prompt as answered when story is saved ===
+  useEffect(() => {
+    if (story.savedStoryId && isAnsweringFamilyPrompt && acceptedPrompt) {
+      markAnswered(story.savedStoryId);
+    }
+  }, [story.savedStoryId, isAnsweringFamilyPrompt, acceptedPrompt, markAnswered]);
 
   // === Session ending ===
   if (story.showSessionEnding) {
@@ -772,6 +804,37 @@ export default function ConversationPage() {
                   </div>
                 </div>
               ))}
+              {/* Family prompt card */}
+              {pendingPrompt && !isAnsweringFamilyPrompt && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-amber-200 text-sm mb-1">
+                    From your {pendingPrompt.submitterRelationship} {pendingPrompt.submitterName}
+                  </p>
+                  <p className="text-white text-base mb-3">
+                    &ldquo;{pendingPrompt.content}&rdquo;
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={acceptPrompt}
+                      className="flex-1 py-2 px-4 rounded-xl bg-amber-500/20 text-amber-200 text-sm font-medium hover:bg-amber-500/30 transition-colors"
+                    >
+                      Tell this story
+                    </button>
+                    <button
+                      onClick={skipPrompt}
+                      className="py-2 px-4 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* Family prompt answering badge */}
+              {isAnsweringFamilyPrompt && acceptedPrompt && (
+                <div className="mb-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 inline-flex items-center gap-2 text-sm text-amber-200">
+                  <span>Answering {acceptedPrompt.submitterName}&apos;s question</span>
+                </div>
+              )}
               {hasActiveInput && (
                 <div className="flex justify-end">
                   <div className="max-w-[80%] rounded-2xl px-5 py-3 bg-[#E86D48]/10 border border-dashed border-[#E86D48]/30">

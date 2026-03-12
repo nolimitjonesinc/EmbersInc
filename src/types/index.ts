@@ -111,3 +111,29 @@ export interface ApiError {
   code?: string;
   details?: string;
 }
+
+// Family Prompt Types
+export interface FamilyPrompt {
+  id: string;
+  familyGroupId: string;
+  submitterId?: string;
+  targetUserId: string;
+  submitterName: string;
+  submitterRelationship: string;
+  submitterEmail?: string;
+  type: 'question' | 'photo';
+  content: string;
+  photoUrl?: string;
+  status: 'pending' | 'offered' | 'answered' | 'skipped' | 'declined';
+  storyId?: string;
+  offeredCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type PromptRelationship =
+  | 'daughter' | 'son'
+  | 'granddaughter' | 'grandson'
+  | 'niece' | 'nephew'
+  | 'friend' | 'spouse'
+  | 'sibling' | 'other';

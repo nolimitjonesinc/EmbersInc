@@ -35,6 +35,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // File size validation
+    const MAX_AUDIO_SIZE = 25 * 1024 * 1024 // 25MB
+    if (audioFile.size > MAX_AUDIO_SIZE) {
+      return NextResponse.json(
+        { error: 'Audio file is too large. Maximum size is 25MB.' },
+        { status: 413 }
+      )
+    }
+
+    // MIME type validation
+    const validAudioTypes = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/x-m4a']
+    if (!validAudioTypes.includes(audioFile.type) && !audioFile.type.startsWith('audio/')) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Please upload an audio file.' },
+        { status: 400 }
+      )
+    }
+
     // Generate unique filename
     const timestamp = Date.now()
     const extension = audioFile.name.split('.').pop() || 'webm'

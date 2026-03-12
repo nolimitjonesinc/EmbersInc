@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ChapterType } from '@/types';
 import { chapters } from '@/lib/utils/chapters';
@@ -15,6 +15,7 @@ interface ApiStory {
   tags: string[];
   sentiment_score?: number;
   is_published: boolean;
+  prompted_by_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,30 @@ export default function LifeBookPage() {
   const [selectedChapter, setSelectedChapter] = useState<ChapterType | null>(null);
   const [userName, setUserName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStories = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/stories');
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Please sign in to see your Life Book.');
+          return;
+        }
+        setError('We couldn\'t load your stories right now. Please try again.');
+        return;
+      }
+      const data = await response.json();
+      setStories(data.stories || []);
+    } catch (err) {
+      console.error('[LifeBook] Failed to load stories:', err);
+      setError('We couldn\'t load your stories right now. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const storedName = localStorage.getItem('embers_user_name');
@@ -31,27 +56,8 @@ export default function LifeBookPage() {
       setUserName(storedName);
     }
 
-    const fetchStories = async () => {
-      try {
-        const response = await fetch('/api/stories');
-        if (!response.ok) {
-          if (response.status === 401) {
-            setStories([]);
-            return;
-          }
-          throw new Error('Failed to fetch stories');
-        }
-        const data = await response.json();
-        setStories(data.stories || []);
-      } catch (err) {
-        console.error('Error fetching stories:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchStories();
-  }, []);
+  }, [fetchStories]);
 
   const getStoriesForChapter = (chapterId: ChapterType) => {
     return stories.filter((s) => s.chapter === chapterId);
@@ -287,6 +293,11 @@ export default function LifeBookPage() {
                               {new Date(story.created_at).toLocaleDateString()}
                             </span>
                           </div>
+                          {story.prompted_by_name && (
+                            <span className="text-xs text-amber-300/70 flex items-center gap-1 mt-1">
+                              Asked by {story.prompted_by_name}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -319,8 +330,21 @@ export default function LifeBookPage() {
           </div>
         )}
 
+        {/* Error state */}
+        {error && (
+          <div className="text-center py-12">
+            <p className="text-amber-200 text-lg mb-4">{error}</p>
+            <button
+              onClick={() => fetchStories()}
+              className="px-6 py-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
         {/* Empty state */}
-        {!isLoading && totalStories === 0 && (
+        {!isLoading && !error && totalStories === 0 && (
           <div className="text-center py-24">
             <div className="w-24 h-24 mx-auto mb-8 relative">
               <span
