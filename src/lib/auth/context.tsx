@@ -11,6 +11,10 @@ interface AuthContextType {
   session: Session | null
   isLoading: boolean
   isConfigured: boolean
+  /** True when the user authenticated via phone OTP (no email) */
+  isPhoneAuth: boolean
+  /** The user's phone number from Supabase auth (E.164 format) */
+  authPhone: string | null
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -27,6 +31,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isConfigured, setIsConfigured] = useState(false)
+  const [isPhoneAuth, setIsPhoneAuth] = useState(false)
+  const [authPhone, setAuthPhone] = useState<string | null>(null)
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -78,6 +84,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session?.user ?? null)
 
         if (session?.user) {
+          const phone = session.user.phone ?? null
+          setIsPhoneAuth(!!phone && !session.user.email)
+          setAuthPhone(phone)
           const profile = await fetchProfile(session.user.id)
           setProfile(profile)
         }
@@ -97,9 +106,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session?.user ?? null)
 
         if (session?.user) {
+          const phone = session.user.phone ?? null
+          setIsPhoneAuth(!!phone && !session.user.email)
+          setAuthPhone(phone)
           const profile = await fetchProfile(session.user.id)
           setProfile(profile)
         } else {
+          setIsPhoneAuth(false)
+          setAuthPhone(null)
           setProfile(null)
         }
 
@@ -120,6 +134,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null)
     setProfile(null)
     setSession(null)
+    setIsPhoneAuth(false)
+    setAuthPhone(null)
   }
 
   return (
@@ -130,6 +146,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         session,
         isLoading,
         isConfigured,
+        isPhoneAuth,
+        authPhone,
         signOut,
         refreshProfile,
       }}

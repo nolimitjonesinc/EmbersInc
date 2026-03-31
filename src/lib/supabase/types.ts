@@ -12,7 +12,8 @@ export interface Database {
       users: {
         Row: {
           id: string
-          email: string
+          email: string | null
+          phone: string | null
           name: string | null
           avatar_url: string | null
           preferences: Json | null
@@ -25,7 +26,8 @@ export interface Database {
         }
         Insert: {
           id?: string
-          email: string
+          email?: string | null
+          phone?: string | null
           name?: string | null
           avatar_url?: string | null
           preferences?: Json | null
@@ -38,7 +40,8 @@ export interface Database {
         }
         Update: {
           id?: string
-          email?: string
+          email?: string | null
+          phone?: string | null
           name?: string | null
           avatar_url?: string | null
           preferences?: Json | null
