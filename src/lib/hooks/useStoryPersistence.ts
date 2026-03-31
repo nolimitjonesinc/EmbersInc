@@ -223,6 +223,11 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
       // Record in session data
       const style = userStyleService.getStyle();
       userStyleService.recordStory(Object.keys(style.commonThemes));
+      userStyleService.recordLastStory({
+        title: storyTitle,
+        summary,
+        topics: Object.keys(style.commonThemes),
+      });
 
       setShowSessionEnding(true);
       return true;

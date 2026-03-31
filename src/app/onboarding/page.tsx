@@ -384,6 +384,7 @@ export default function OnboardingPage() {
           stopListening()
           goToPhase('starting')
           // Set flags so conversation page auto-starts voice with SHORT greeting
+          sessionStorage.removeItem('embers_intro_played')
           sessionStorage.setItem('embers_auto_start_conversation', 'true')
           sessionStorage.setItem('embers_came_from_onboarding', 'true')
           setTimeout(() => {
@@ -451,6 +452,7 @@ export default function OnboardingPage() {
     stopListening()
     goToPhase('starting')
     // Set flags so conversation page auto-starts voice with SHORT greeting
+    sessionStorage.removeItem('embers_intro_played')
     sessionStorage.setItem('embers_auto_start_conversation', 'true')
     sessionStorage.setItem('embers_came_from_onboarding', 'true')
     setTimeout(() => {

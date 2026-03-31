@@ -26,12 +26,12 @@ interface SpeechRecognitionState {
   recordingDuration: number; // Total recording time in seconds
 }
 
-// Silence thresholds in milliseconds
-// Generous for elderly users — they pause to think, collect memories, find words.
+// Silence thresholds in milliseconds.
+// Keep this responsive; if it feels dead, people assume the mic failed.
 const SILENCE_THRESHOLDS = {
-  detected: 4000,     // 4 seconds - "Take your time..."
-  preparing: 6000,    // 6 seconds - "Whenever you're ready..."
-  readyToSend: 8000,  // 8 seconds - auto-send
+  detected: 2000,
+  preparing: 3000,
+  readyToSend: 5000,
 };
 
 function getSilenceStage(duration: number): SilenceStage {
@@ -65,7 +65,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     onResult,
     onSilence,
     onSilenceStageChange,
-    silenceTimeout = 8000,
+    silenceTimeout = 5000,
     continuous = true,
     autoRestart = true, // Enable auto-restart by default for reliability
   } = options;
@@ -279,20 +279,15 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           onResult(finalTranscriptRef.current);
         }
 
-        // Only start/reset silence timer on FINAL results.
-        // This is when the user has finished a phrase — now we wait for more.
+        // Reset silence timer on new speech.
         startSilenceTracking();
       } else {
         setState((prev) => ({
           ...prev,
           interimTranscript,
         }));
-        // Interim results = user is mid-speech. Clear any active silence
-        // timer (they're still talking) but don't START a new one.
-        // The timer only starts after a final result lands.
-        if (silenceStartRef.current) {
-          clearSilenceTracking();
-        }
+        // Keep the UI feeling alive while the user is actively talking.
+        startSilenceTracking();
       }
     };
 
@@ -444,9 +439,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
     try {
       recognition.start();
-      // Don't start silence tracking here — wait until the user actually speaks.
-      // Starting it at recognition.start() would show "Take your time..." stages
-      // to elderly users who are just getting ready to talk.
+      startSilenceTracking();
     } catch (err) {
       console.error('Failed to start speech recognition:', err);
       setState((prev) => ({

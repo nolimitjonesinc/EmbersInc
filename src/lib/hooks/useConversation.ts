@@ -24,6 +24,8 @@ interface UserContext {
   frequentlyMentionedPeople: string[];
   preferredTimeframes: string[];
   commonThemes: string[];
+  lastSessionSummary?: string;
+  lastStoryTitle?: string;
 }
 
 export interface UseConversationReturn {

@@ -31,7 +31,12 @@ interface UseFamilyPromptsReturn {
   acceptedPrompt: FamilyPromptData | null;
 }
 
-export function useFamilyPrompts(): UseFamilyPromptsReturn {
+interface UseFamilyPromptsOptions {
+  enabled?: boolean;
+}
+
+export function useFamilyPrompts(options: UseFamilyPromptsOptions = {}): UseFamilyPromptsReturn {
+  const { enabled = true } = options;
   const { user, isLoading: authLoading } = useAuth();
 
   const [pendingPrompt, setPendingPrompt] = useState<FamilyPromptData | null>(null);
@@ -44,6 +49,7 @@ export function useFamilyPrompts(): UseFamilyPromptsReturn {
 
   // Fetch pending prompt on mount (if authenticated)
   useEffect(() => {
+    if (!enabled) return;
     if (hasFetchedRef.current || authLoading) return;
     if (!user) {
       // Not authenticated — no family prompts
@@ -76,7 +82,7 @@ export function useFamilyPrompts(): UseFamilyPromptsReturn {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [user, authLoading]);
+  }, [enabled, user, authLoading]);
 
   const acceptPrompt = useCallback(() => {
     if (!pendingPrompt) return;

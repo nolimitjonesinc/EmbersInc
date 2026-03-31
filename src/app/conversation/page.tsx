@@ -22,6 +22,10 @@ import { useSubscription, getLocalStoryCount } from '@/lib/subscription/useSubsc
 
 // --- Constants ---
 
+// Keep optional family-prompt work out of the critical voice path until
+// the core conversation loop is stable again.
+const ENABLE_FAMILY_PROMPTS_IN_CONVERSATION = false;
+
 const END_PHRASES = [
   'goodbye', 'good bye', 'bye bye', 'thank you', 'thanks',
   "that's all", "that is all", "i'm done", "i am done",
@@ -49,6 +53,8 @@ function generateVoiceIntroduction(
   isReturningUser?: boolean,
   mentionedPeople?: string[],
   commonThemes?: string[],
+  lastSessionSummary?: string,
+  lastStoryTitle?: string,
   familyPrompt?: { submitterName: string; submitterRelationship: string; content: string } | null
 ): { greeting: string; question: string } {
   // If there's a family prompt, use a special greeting
@@ -66,14 +72,36 @@ function generateVoiceIntroduction(
     ];
     const greeting = returningGreetings[Math.floor(Math.random() * returningGreetings.length)];
 
+    if (lastSessionSummary) {
+      const recapLead = lastStoryTitle
+        ? `Last time, in "${lastStoryTitle}," you shared this: ${lastSessionSummary}`
+        : `Last time, you shared this: ${lastSessionSummary}`;
+      return {
+        greeting,
+        question: `${recapLead} Would you like to keep talking about that, or would you rather talk about something else today?`,
+      };
+    }
+
     if (mentionedPeople && mentionedPeople.length > 0) {
       const person = mentionedPeople[Math.floor(Math.random() * mentionedPeople.length)];
       return {
         greeting,
-        question: `Last time you shared some wonderful stories. I'd love to hear more whenever you're ready. What memory has been on your mind lately? Or if you'd like, tell me more about ${person}.`,
+        question: `Last time you shared some wonderful stories about ${person}. Would you like to keep talking about ${person}, or would you rather talk about something else today?`,
       };
     }
-    return { greeting, question: "What memory has been on your mind lately?" };
+
+    if (commonThemes && commonThemes.length > 0) {
+      const theme = commonThemes[Math.floor(Math.random() * commonThemes.length)];
+      return {
+        greeting,
+        question: `We've touched on some meaningful stories about ${theme}. Would you like to continue there, or talk about something else today?`,
+      };
+    }
+
+    return {
+      greeting,
+      question: 'Would you like to continue where we left off, or talk about something else today?',
+    };
   }
 
   const newUserGreeting = userName ? `Hello, ${userName}. I'm Embers.` : "Hello. I'm Embers.";
@@ -105,7 +133,7 @@ export default function ConversationPage() {
     declinePrompt,
     markAnswered,
     acceptedPrompt,
-  } = useFamilyPrompts();
+  } = useFamilyPrompts({ enabled: ENABLE_FAMILY_PROMPTS_IN_CONVERSATION });
 
   // === Page-level state ===
   const [inputText, setInputText] = useState('');
@@ -388,6 +416,8 @@ export default function ConversationPage() {
         conversation.userContext.isReturningUser,
         conversation.userContext.frequentlyMentionedPeople,
         conversation.userContext.commonThemes,
+        conversation.userContext.lastSessionSummary,
+        conversation.userContext.lastStoryTitle,
         pendingPrompt
       );
       fullIntroduction = `${greeting}\n\n${question}`;
@@ -434,7 +464,11 @@ export default function ConversationPage() {
   // Auto-start voice intro from onboarding
   useEffect(() => {
     const autoStart = sessionStorage.getItem('embers_auto_start_conversation');
-    if (!autoStart || hasPlayedIntro || introPlayedRef.current) return;
+    const cameFromOnboarding = sessionStorage.getItem('embers_came_from_onboarding');
+    const forceAutoStart = autoStart && cameFromOnboarding;
+
+    if (!autoStart) return;
+    if (!forceAutoStart && (hasPlayedIntro || introPlayedRef.current)) return;
 
     // Check for draft — let draft recovery handle it if present
     try {
@@ -528,7 +562,13 @@ export default function ConversationPage() {
   useEffect(() => { sendMessageRef.current = handleSendMessage; });
 
   const handleFireClick = useCallback(() => {
-    if (tts.isSpeaking || conversation.isProcessing || isPlayingIntro || tts.isLoadingTTS || isTranscribing) return;
+    if (conversation.isProcessing || isPlayingIntro || isTranscribing) return;
+
+    if (tts.isSpeaking || tts.isLoadingTTS) {
+      shouldAutoResumeRef.current = false;
+      tts.stopAllAudio();
+      return;
+    }
 
     // First interaction: play intro
     if (conversation.messages.length === 0 && !hasPlayedIntro && !introPlayedRef.current) {

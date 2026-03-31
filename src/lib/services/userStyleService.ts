@@ -100,6 +100,23 @@ export function recordStory(topics: string[]): void {
 }
 
 /**
+ * Record the last completed story so Embers can open with a real recap.
+ */
+export function recordLastStory(details: {
+  title?: string | null
+  summary: string
+  topics?: string[]
+}): void {
+  const session = getSessionData()
+  session.lastSessionSummary = details.summary
+  session.lastStoryTitle = details.title || undefined
+  if (details.topics?.length) {
+    session.lastStoryTopics = details.topics.slice(0, 5)
+  }
+  saveSessionData(session)
+}
+
+/**
  * Record a used prompt (to avoid repetition)
  */
 export function recordUsedPrompt(promptQuestion: string): void {
@@ -131,6 +148,8 @@ export function getUserContext(): {
   preferredTimeframes: string[]
   commonThemes: string[]
   storyCount: number
+  lastSessionSummary?: string
+  lastStoryTitle?: string
 } {
   const style = getUserStyle()
   const session = getSessionData()
@@ -140,7 +159,9 @@ export function getUserContext(): {
     frequentlyMentionedPeople: style.frequentlyMentionedPeople.slice(0, 5),
     preferredTimeframes: style.preferredTimeframes.slice(0, 3),
     commonThemes: getTopThemes(style.commonThemes, 3),
-    storyCount: session.storyCount
+    storyCount: session.storyCount,
+    lastSessionSummary: session.lastSessionSummary,
+    lastStoryTitle: session.lastStoryTitle,
   }
 }
 
@@ -167,6 +188,7 @@ export const userStyleService = {
   getSession: getSessionData,
   saveSession: saveSessionData,
   recordStory,
+  recordLastStory,
 
   // Prompt methods
   recordPrompt: recordUsedPrompt,

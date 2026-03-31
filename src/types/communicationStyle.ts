@@ -113,6 +113,8 @@ export interface UserSessionData {
   // Story tracking
   storyCount: number
   lastStoryTopics: string[]
+  lastStoryTitle?: string
+  lastSessionSummary?: string
 
   // Communication style (persisted)
   communicationStyle: UserCommunicationStyle
@@ -131,6 +133,8 @@ export const defaultSessionData: UserSessionData = {
   totalSessions: 1,
   storyCount: 0,
   lastStoryTopics: [],
+  lastStoryTitle: undefined,
+  lastSessionSummary: undefined,
   communicationStyle: defaultCommunicationStyle,
   usedPromptQuestions: []
 }
