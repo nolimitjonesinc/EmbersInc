@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { formatDistanceToNow } from 'date-fns'
 
 interface ElderData {
   userId: string
@@ -24,6 +23,25 @@ interface FamilyGroup {
 
 interface DashboardData {
   familyGroups: FamilyGroup[]
+}
+
+function formatTimeAgo(value: string): string {
+  const then = new Date(value).getTime()
+  const now = Date.now()
+
+  if (Number.isNaN(then)) return 'recently'
+
+  const diffMs = Math.max(0, now - then)
+  const minutes = Math.floor(diffMs / (1000 * 60))
+  const hours = Math.floor(diffMs / (1000 * 60 * 60))
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`
+
+  return new Date(value).toLocaleDateString()
 }
 
 export default function FamilyDashboardPage() {
@@ -252,7 +270,7 @@ export default function FamilyDashboardPage() {
 
                       <p className="text-sm text-[#f9f7f2]/60 mb-4">
                         {elder.lastActivity
-                          ? `Last shared ${formatDistanceToNow(new Date(elder.lastActivity))} ago`
+                          ? `Last shared ${formatTimeAgo(elder.lastActivity)}`
                           : "Hasn't shared a memory yet"}
                       </p>
 

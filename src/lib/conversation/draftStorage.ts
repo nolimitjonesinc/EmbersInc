@@ -126,6 +126,14 @@ export function loadConversationDraft(): {
 }
 
 /**
+ * Quick check used by the conversation screen before auto-starting audio.
+ */
+export function hasRecoverableDraft(): boolean {
+  const loadedDraft = loadConversationDraft();
+  return !!loadedDraft?.draft?.messages?.length;
+}
+
+/**
  * Mark a draft as cloud-backed so it won't be evicted during rotation.
  */
 export function markDraftCloudBacked(draftId: string): void {

@@ -6,6 +6,13 @@ import { Database } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
 
+type FamilyGroupOwnerRecord = Pick<
+  Database['public']['Tables']['family_groups']['Row'],
+  'id' | 'owner_id'
+>
+
+type FamilyGroupUpdate = Database['public']['Tables']['family_groups']['Update']
+
 /**
  * POST /api/family/regenerate-invite
  *
@@ -51,11 +58,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Verify user is the owner of this family group
-    const { data: familyGroup, error: fetchError } = await supabase
+    const { data: familyGroupData, error: fetchError } = await supabase
       .from('family_groups')
       .select('id, owner_id')
       .eq('id', familyGroupId)
       .single()
+    const familyGroup = familyGroupData as FamilyGroupOwnerRecord | null
 
     if (fetchError || !familyGroup) {
       return NextResponse.json(
@@ -73,14 +81,15 @@ export async function POST(request: NextRequest) {
 
     // Generate new invite code
     const newInviteCode = generateInviteCode()
+    const familyGroupUpdate: FamilyGroupUpdate = {
+      invite_code: newInviteCode,
+      updated_at: new Date().toISOString()
+    }
 
     // Update the family group
     const { error: updateError } = await supabase
       .from('family_groups')
-      .update({
-        invite_code: newInviteCode,
-        updated_at: new Date().toISOString()
-      })
+      .update(familyGroupUpdate as never)
       .eq('id', familyGroupId)
       .eq('owner_id', user.id) // Extra safety check
 

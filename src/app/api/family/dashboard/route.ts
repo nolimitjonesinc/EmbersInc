@@ -25,6 +25,26 @@ interface DashboardData {
   }>
 }
 
+type FamilyMemberRecord = Pick<
+  Database['public']['Tables']['embers_family_members']['Row'],
+  'family_group_id' | 'role' | 'user_id' | 'email' | 'relationship'
+>
+
+type FamilyGroupRecord = Pick<
+  Database['public']['Tables']['family_groups']['Row'],
+  'id' | 'name' | 'owner_id' | 'invite_code'
+>
+
+type UserRecord = Pick<
+  Database['public']['Tables']['users']['Row'],
+  'id' | 'name' | 'email'
+>
+
+type StoryTimestampRecord = Pick<
+  Database['public']['Tables']['embers_stories']['Row'],
+  'created_at'
+>
+
 /**
  * GET /api/family/dashboard
  *
@@ -57,11 +77,12 @@ export async function GET(request: NextRequest) {
     })
 
     // Find all family groups where user is owner or active member
-    const { data: memberRecords, error: memberError } = await supabase
+    const { data, error: memberError } = await supabase
       .from('embers_family_members')
       .select('family_group_id, role')
       .eq('user_id', user.id)
       .eq('status', 'active')
+    const memberRecords = (data ?? []) as FamilyMemberRecord[]
 
     if (memberError) {
       console.error('[FamilyDashboard] Error fetching member records:', memberError)
@@ -71,17 +92,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (!memberRecords || memberRecords.length === 0) {
+    if (memberRecords.length === 0) {
       return NextResponse.json<DashboardData>({ familyGroups: [] })
     }
 
     const familyGroupIds = memberRecords.map(m => m.family_group_id)
 
     // Fetch family groups
-    const { data: familyGroups, error: groupsError } = await supabase
+    const { data: groupsData, error: groupsError } = await supabase
       .from('family_groups')
       .select('id, name, owner_id, invite_code')
       .in('id', familyGroupIds)
+    const familyGroups = (groupsData ?? []) as FamilyGroupRecord[]
 
     if (groupsError) {
       console.error('[FamilyDashboard] Error fetching family groups:', groupsError)
@@ -96,15 +118,16 @@ export async function GET(request: NextRequest) {
       familyGroups: []
     }
 
-    for (const group of familyGroups || []) {
+    for (const group of familyGroups) {
       const userRole = memberRecords.find(m => m.family_group_id === group.id)?.role || 'member'
 
       // Fetch all active members in this group
-      const { data: members, error: membersError } = await supabase
+      const { data: membersData, error: membersError } = await supabase
         .from('embers_family_members')
         .select('user_id, email, relationship')
         .eq('family_group_id', group.id)
         .eq('status', 'active')
+      const members = (membersData ?? []) as FamilyMemberRecord[]
 
       if (membersError) {
         console.error('[FamilyDashboard] Error fetching group members:', membersError)
@@ -114,15 +137,16 @@ export async function GET(request: NextRequest) {
       // Get user details for each member
       const elderData: ElderData[] = []
 
-      for (const member of members || []) {
+      for (const member of members) {
         if (!member.user_id) continue // Skip pending invites
 
         // Fetch user profile
-        const { data: userProfile } = await supabase
+        const { data: profileData } = await supabase
           .from('users')
           .select('id, name, email')
           .eq('id', member.user_id)
           .single()
+        const userProfile = profileData as UserRecord | null
 
         if (!userProfile) continue
 
@@ -134,7 +158,7 @@ export async function GET(request: NextRequest) {
           .eq('is_published', true)
 
         // Get most recent story timestamp
-        const { data: recentStory } = await supabase
+        const { data: recentStoryData } = await supabase
           .from('embers_stories')
           .select('created_at')
           .eq('user_id', member.user_id)
@@ -142,6 +166,7 @@ export async function GET(request: NextRequest) {
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
+        const recentStory = recentStoryData as StoryTimestampRecord | null
 
         elderData.push({
           userId: userProfile.id,
