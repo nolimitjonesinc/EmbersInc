@@ -1,8 +1,8 @@
 # Invisible Save & Backup System
 
 > Source: `PRD-INVISIBLE-SAVE.md`
-> Progress: 5/24 tasks done
-> Sprint: Next
+> Progress: 12/24 tasks done
+> Sprint: Active
 > Depends on: Existing auth, Supabase, local autosave infrastructure
 
 ## Why This Matters
@@ -11,7 +11,7 @@ The current save model expects elderly users to understand browser storage and c
 
 ## Tasks
 
-### Phase 1: Enhanced Local Autosave (Crash Cushion)
+### Phase 1: Enhanced Local Autosave (Crash Cushion) — DONE
 
 - [x] Upgrade autosave to save every 5 seconds during active conversation (currently only saves at specific events)
 - [x] Add save triggers on browser blur, visibility change, and beforeunload
@@ -19,17 +19,17 @@ The current save model expects elderly users to understand browser storage and c
 - [x] Add draft recovery prompt: "Welcome back — continue where you left off?"
 - [x] Remove misleading "saved" language for local-only state — use "protected on this device"
 
-### Phase 2: Voice-Based Enrollment (Solo Mode B)
+### Phase 2: Voice-Based Enrollment (Solo Mode B) — DONE
 
-- [ ] Enable Supabase phone auth (OTP via SMS) — configure in Supabase dashboard
-- [ ] Create voice enrollment prompt logic — trigger after 30-60 seconds of meaningful conversation
-- [ ] Build phone number capture via voice: speech-to-text → parse phone number → confirm back via TTS
-- [ ] Build SMS code entry screen — large font, 6-digit, 10-minute expiry, accessible
-- [ ] Create email fallback enrollment — typed input for users without phone
-- [ ] Add enrollment confirmation TTS: "You're backed up now. Everything you share is safe."
-- [ ] Implement max-2-prompts-per-session rule (first at natural pause, second at session end)
+- [x] Phone number speech parser — spoken digits to E.164 format (`parseSpokenPhone.ts`)
+- [x] `usePhoneEnrollment` hook — state machine: idle → asking → confirmed → sending → awaiting-code → verifying → enrolled
+- [x] API route `POST /api/auth/phone/send-otp` — triggers Supabase phone OTP via Twilio
+- [x] API route `POST /api/auth/phone/verify-otp` — verifies code, establishes session
+- [x] `VoiceEnrollmentFlow` component — full voice-guided UI with Ember's voice
+- [x] Update `AuthContext` + types for phone-auth users (phone field, no email required)
+- [x] Draft migration after enrollment — moves localStorage draft to cloud after phone auth
 
-### Phase 3: Family-Started Accounts (Mode A)
+### Phase 3: Family-Started Accounts (Mode A) — UP NEXT
 
 - [ ] Create Supabase tables: `family_circles` and `family_circle_members`
 - [ ] Build family member signup flow — "Set Up Embers for Someone You Love" landing variant
@@ -54,10 +54,10 @@ The current save model expects elderly users to understand browser storage and c
 
 ## Order of Operations
 
-1. **Phase 1 first** — this is pure safety, no new features, protects users right now
-2. **Phase 2 next** — solo enrollment is the biggest UX gap
+1. ~~**Phase 1 first**~~ DONE
+2. ~~**Phase 2 next**~~ DONE
 3. **Phase 3 after** — family flow is the better path but more infrastructure
-4. **Phase 4 alongside 2+3** — sync and language should evolve as enrollment flows land
+4. **Phase 4 alongside 3** — sync and language should evolve as enrollment flows land
 5. **Phase 5 last** — recovery is important but only matters after enrollment exists
 
 ## Dependencies
@@ -67,24 +67,19 @@ The current save model expects elderly users to understand browser storage and c
 - SMS costs: ~$0.01/message — budget consideration for OTP codes
 - Existing `dualStorage.ts` and `migrateLocalStories.ts` are reusable foundations
 
-## Files Likely Created
-- `src/lib/enrollment/voiceEnrollment.ts`
-- `src/lib/enrollment/phoneAuth.ts`
-- `src/lib/enrollment/inviteLink.ts`
-- `src/lib/enrollment/saveLang.ts`
-- `src/components/enrollment/PhoneCapture.tsx`
-- `src/components/enrollment/SMSCodeEntry.tsx`
-- `src/components/enrollment/EnrollmentPrompt.tsx`
-- `src/app/family/page.tsx`
-- `src/app/family/dashboard/page.tsx`
-- `src/app/invite/[token]/page.tsx`
-
-## Files Likely Modified
-- `src/lib/hooks/useVoiceGuidedAutoSave.ts` — enhanced save frequency + triggers ✓ DONE
-- `src/lib/storage/dualStorage.ts` — post-enrollment dual-write
-- `src/lib/subscription/migrateLocalStories.ts` — adapt for new enrollment flow
-- `src/components/conversation/SessionEnding.tsx` — new save language
-- `src/app/conversation/page.tsx` — enrollment trigger integration ✓ DONE
-
 ## Files Created (Phase 1)
-- `src/lib/conversation/draftStorage.ts` — 3-conversation rotation, honest language contract ✓ DONE
+- `src/lib/conversation/draftStorage.ts` — 3-conversation rotation, honest language contract
+
+## Files Created (Phase 2)
+- `src/lib/speech/parseSpokenPhone.ts` — spoken phone number to E.164 parser
+- `src/lib/hooks/usePhoneEnrollment.ts` — enrollment state machine hook
+- `src/lib/hooks/useDraftMigration.ts` — local-to-cloud migration after enrollment
+- `src/app/api/auth/phone/send-otp/route.ts` — Supabase phone OTP trigger
+- `src/app/api/auth/phone/verify-otp/route.ts` — OTP verification + session
+- `src/components/enrollment/VoiceEnrollmentFlow.tsx` — full voice-guided enrollment UI
+
+## Files Modified
+- `src/lib/hooks/useVoiceGuidedAutoSave.ts` — enhanced save frequency + triggers (Phase 1)
+- `src/app/conversation/page.tsx` — enrollment trigger integration (Phase 1)
+- `src/lib/auth/context.tsx` — phone auth support (Phase 2)
+- `src/lib/supabase/types.ts` — phone field on user type (Phase 2)
