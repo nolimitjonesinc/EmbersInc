@@ -4,9 +4,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Message } from '@/types';
 import { type SyncStatus } from '@/lib/storage/dualStorage';
 import {
-  saveConversationDraft,
-  loadConversationDraft,
   clearConversationDraft,
+  loadConversationDraft,
+  saveConversationDraft,
 } from '@/lib/conversation/draftStorage';
 
 /**
@@ -18,9 +18,7 @@ import {
  * - 90 seconds: Auto-save draft and announce
  *
  * Also handles:
- * - Auto-draft saving to localStorage every 5 seconds (crash cushion)
- * - Emergency saves on blur, visibility change, and beforeunload
- * - Cloud sync to Supabase every 30 seconds (best-effort)
+ * - Auto-draft saving to localStorage every 30 seconds
  * - Voice command recognition (save, done, goodbye)
  * - Draft recovery on page load
  */
@@ -41,21 +39,20 @@ interface UseVoiceGuidedAutoSaveOptions {
   onAutoSave: () => Promise<void>;
   onSilencePrompt?: (prompt: SilencePrompt) => void;
   enabled?: boolean;
-  enableSupabaseDrafts?: boolean;
+  enableSupabaseDrafts?: boolean; // Enable server-side draft saving
 }
 
 // Silence thresholds in milliseconds
 const SILENCE_THRESHOLDS = {
-  GENTLE_CHECKIN: 30 * 1000,
-  SAVE_OFFER: 60 * 1000,
-  AUTO_SAVE: 90 * 1000,
+  GENTLE_CHECKIN: 30 * 1000,      // 30 seconds
+  SAVE_OFFER: 60 * 1000,          // 60 seconds
+  AUTO_SAVE: 90 * 1000,           // 90 seconds
 };
 
-// Local autosave runs every 5s — crash cushion, no network needed
-const LOCAL_SAVE_INTERVAL = 5 * 1000;
-// Supabase sync runs every 30s — best-effort, separate from local
-const CLOUD_SYNC_INTERVAL = 30 * 1000;
+// Auto-draft save interval
+const AUTO_DRAFT_INTERVAL = 30 * 1000; // 30 seconds
 
+// Voice prompts for silence stages
 const SILENCE_PROMPTS = {
   gentle: [
     "Take your time. I'm here when you're ready.",
@@ -68,12 +65,13 @@ const SILENCE_PROMPTS = {
     "We've shared some wonderful memories. Say 'save' to keep them safe, or keep going.",
   ],
   autoSaved: [
-    "I've protected your story on this device. You can come back anytime to continue. Say 'goodbye' when you're done, or keep sharing.",
-    "Don't worry, I've kept everything we've talked about safe on this device. Take your time, or say 'goodbye' to finish.",
-    "Your memories are protected on this device. Continue whenever you're ready, or say 'goodbye' to end our conversation.",
+    "I've saved your story as a draft. You can come back anytime to continue. Say 'goodbye' when you're done, or keep sharing.",
+    "Don't worry, I've saved everything we've talked about. Take your time, or say 'goodbye' to finish.",
+    "Your memories are safely saved. Continue whenever you're ready, or say 'goodbye' to end our conversation.",
   ],
 };
 
+// Voice commands to recognize
 export const VOICE_COMMANDS = {
   SAVE: ['save', 'save my story', 'save this', 'save it', 'keep this'],
   DONE: ['done', "i'm done", 'i am done', 'finished', "i'm finished", 'i am finished', "that's all", 'that is all'],
@@ -86,9 +84,22 @@ function getRandomPrompt(prompts: string[]): string {
 
 export function detectVoiceCommand(text: string): 'save' | 'done' | 'goodbye' | null {
   const lowerText = text.toLowerCase().trim();
-  if (VOICE_COMMANDS.GOODBYE.some(cmd => lowerText.includes(cmd))) return 'goodbye';
-  if (VOICE_COMMANDS.SAVE.some(cmd => lowerText.includes(cmd))) return 'save';
-  if (VOICE_COMMANDS.DONE.some(cmd => lowerText.includes(cmd))) return 'done';
+
+  // Check for goodbye first (most specific)
+  if (VOICE_COMMANDS.GOODBYE.some(cmd => lowerText.includes(cmd))) {
+    return 'goodbye';
+  }
+
+  // Check for save commands
+  if (VOICE_COMMANDS.SAVE.some(cmd => lowerText.includes(cmd))) {
+    return 'save';
+  }
+
+  // Check for done commands
+  if (VOICE_COMMANDS.DONE.some(cmd => lowerText.includes(cmd))) {
+    return 'done';
+  }
+
   return null;
 }
 
@@ -98,33 +109,36 @@ export function useVoiceGuidedAutoSave(
 ) {
   const { onPlayVoice, onAutoSave, onSilencePrompt, enabled = true, enableSupabaseDrafts = true } = options;
 
+  // Silence tracking
   const [silenceStage, setSilenceStage] = useState<'none' | 'gentle' | 'save-offer' | 'auto-saved'>('none');
   const [silenceDuration, setSilenceDuration] = useState(0);
+
+  // Auto-save state
   const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>({
     hasDraft: false,
     lastSavedAt: null,
     draftId: null,
   });
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('pending');
 
+  // Refs for timers
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const silenceStartRef = useRef<number | null>(null);
   const draftTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const cloudSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const hasSpokenGentleRef = useRef(false);
   const hasSpokenSaveOfferRef = useRef(false);
   const hasAutoSavedRef = useRef(false);
-  const lastEmergencySaveAtRef = useRef(0);
 
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('pending');
   // Stable draft ID for the session — generated once, not on every save
   const draftIdRef = useRef<string>(`draft-${Date.now()}`);
+  const lastEmergencySaveAtRef = useRef(0);
 
   // Ref to track current messages without causing effect teardowns
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  // Save draft to localStorage via draftStorage (5-conversation rotation)
+  // Save draft via dualStorage (localStorage instant + Supabase queued)
   const saveDraftToLocalStorage = useCallback(() => {
     const currentMessages = messagesRef.current;
     if (currentMessages.length < 2) return;
@@ -162,7 +176,7 @@ export function useVoiceGuidedAutoSave(
       }
     } catch (err) {
       setSyncStatus(navigator.onLine ? 'error' : 'offline');
-      console.warn('[AutoSave] Supabase draft save failed (protected locally):', err);
+      console.warn('[AutoSave] Supabase draft save failed (saved locally):', err);
     }
   }, [enableSupabaseDrafts]);
 
@@ -173,33 +187,43 @@ export function useVoiceGuidedAutoSave(
     try {
       const response = await fetch('/api/drafts');
       if (!response.ok) return null;
+
       const data = await response.json();
       if (!data.draft) return null;
-      return { messages: data.draft.messages, savedAt: new Date(data.draft.updated_at) };
+
+      return {
+        messages: data.draft.messages,
+        savedAt: new Date(data.draft.updated_at),
+      };
     } catch (err) {
       console.warn('[AutoSave] Could not load cloud draft (using local):', err);
       return null;
     }
   }, [enableSupabaseDrafts]);
 
-  // Load draft from localStorage
+  // Load draft from localStorage via dualStorage
   const loadDraft = useCallback((): { messages: Message[]; savedAt: Date } | null => {
     const result = loadConversationDraft();
     if (!result) return null;
+
     return {
       messages: result.draft.messages,
       savedAt: new Date(result.draft.savedAt),
     };
   }, []);
 
-  // Clear draft from localStorage and optionally Supabase
+  // Clear draft from both localStorage and Supabase
   const clearDraft = useCallback(() => {
     const clearFromCloud = enableSupabaseDrafts
       ? async () => { await fetch('/api/drafts', { method: 'DELETE' }) }
       : undefined;
 
     clearConversationDraft(clearFromCloud);
-    setAutoSaveState({ hasDraft: false, lastSavedAt: null, draftId: null });
+    setAutoSaveState({
+      hasDraft: false,
+      lastSavedAt: null,
+      draftId: null,
+    });
   }, [enableSupabaseDrafts]);
 
   // Reset silence tracking (called when user speaks or interacts)
@@ -210,7 +234,7 @@ export function useVoiceGuidedAutoSave(
     setSilenceDuration(0);
     hasSpokenGentleRef.current = false;
     hasSpokenSaveOfferRef.current = false;
-    // Note: We don't reset hasAutoSavedRef — once auto-saved, stay saved
+    // Note: We don't reset hasAutoSavedRef - once auto-saved, stay saved
   }, []);
 
   // Start tracking silence
@@ -219,14 +243,19 @@ export function useVoiceGuidedAutoSave(
 
     silenceStartRef.current = Date.now();
 
-    if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+    // Clear any existing timer
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+    }
 
+    // Update silence duration every second
     silenceTimerRef.current = setInterval(() => {
       if (!silenceStartRef.current) return;
 
       const elapsed = Date.now() - silenceStartRef.current;
       setSilenceDuration(elapsed);
 
+      // Check thresholds and trigger voice prompts
       if (elapsed >= SILENCE_THRESHOLDS.AUTO_SAVE && !hasAutoSavedRef.current) {
         hasAutoSavedRef.current = true;
         setSilenceStage('auto-saved');
@@ -265,76 +294,71 @@ export function useVoiceGuidedAutoSave(
     saveDraftToLocalStorage();
   }, [enabled, messages, saveDraftToLocalStorage]);
 
-  // Emergency save on blur, visibility change, and beforeunload
+  // Emergency local save when the page is hidden or closed.
   useEffect(() => {
     if (messages.length < 2) return;
 
     const emergencySave = () => {
       const now = Date.now();
-      if (now - lastEmergencySaveAtRef.current < 750) return; // debounce
+      if (now - lastEmergencySaveAtRef.current < 750) return;
       lastEmergencySaveAtRef.current = now;
       saveDraftToLocalStorage();
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') emergencySave();
+      if (document.visibilityState === 'hidden') {
+        emergencySave();
+      }
     };
 
     window.addEventListener('pagehide', emergencySave);
     window.addEventListener('beforeunload', emergencySave);
-    window.addEventListener('blur', emergencySave);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('pagehide', emergencySave);
       window.removeEventListener('beforeunload', emergencySave);
-      window.removeEventListener('blur', emergencySave);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [messages.length, saveDraftToLocalStorage]);
 
-  // 5-second local save — crash cushion, no network needed
+  // Periodic Supabase sync — separate effect so it doesn't tear down on every message
   useEffect(() => {
     if (!enabled) return;
 
     draftTimerRef.current = setInterval(() => {
       if (messagesRef.current.length < 2) return;
       saveDraftToLocalStorage();
-    }, LOCAL_SAVE_INTERVAL);
-
-    return () => {
-      if (draftTimerRef.current) clearInterval(draftTimerRef.current);
-    };
-  }, [enabled, saveDraftToLocalStorage]);
-
-  // 30-second cloud sync — best-effort, separate from local save
-  useEffect(() => {
-    if (!enabled) return;
-
-    cloudSyncTimerRef.current = setInterval(() => {
-      if (messagesRef.current.length < 2) return;
       saveDraftToSupabase();
-    }, CLOUD_SYNC_INTERVAL);
+    }, AUTO_DRAFT_INTERVAL);
 
     return () => {
-      if (cloudSyncTimerRef.current) clearInterval(cloudSyncTimerRef.current);
+      if (draftTimerRef.current) {
+        clearInterval(draftTimerRef.current);
+      }
     };
-  }, [enabled, saveDraftToSupabase]);
+  }, [enabled, saveDraftToLocalStorage, saveDraftToSupabase]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopSilenceTracking();
-      if (draftTimerRef.current) clearInterval(draftTimerRef.current);
-      if (cloudSyncTimerRef.current) clearInterval(cloudSyncTimerRef.current);
+      if (draftTimerRef.current) {
+        clearInterval(draftTimerRef.current);
+      }
     };
   }, [stopSilenceTracking]);
 
   return {
+    // Silence state
     silenceStage,
     silenceDuration,
+
+    // Auto-save state
     autoSaveState,
     syncStatus,
+
+    // Actions
     resetSilence,
     startSilenceTracking,
     stopSilenceTracking,
@@ -343,6 +367,8 @@ export function useVoiceGuidedAutoSave(
     loadDraft,
     loadDraftFromSupabase,
     clearDraft,
+
+    // Utility
     detectVoiceCommand,
   };
 }

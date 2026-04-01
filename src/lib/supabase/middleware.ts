@@ -69,6 +69,7 @@ export const protectedRoutes = [
   '/profile',
   '/timeline',
   '/photo-detective',
+  '/family',
 ]
 
 export const publicRoutes = [

@@ -1,0 +1,12 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e140] [cursor=pointer]:
+    - img [ref=e141]
+  - alert [ref=e144]
+  - generic [ref=e145]:
+    - generic [ref=e146]:
+      - button "Tap to start speaking" [ref=e148] [cursor=pointer]:
+        - paragraph [ref=e163]: tap to begin
+      - generic [ref=e164]:
+        - paragraph [ref=e165]: Hello, I'm Embers
+        - paragraph [ref=e166]: Tap to begin
+    - button "Reset (Dev)" [ref=e167]

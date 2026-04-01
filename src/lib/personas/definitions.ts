@@ -1,3 +1,5 @@
+import { getPreferredName, normalizeUserName } from '@/lib/utils/name'
+
 export interface Persona {
   id: string
   name: string
@@ -398,6 +400,8 @@ export function getPersona(id: string): Persona {
 
 export function getPersonaPrompt(id: string, userName: string): string {
   const persona = getPersona(id)
+  const normalizedName = normalizeUserName(userName) || userName || 'friend'
+  const preferredName = getPreferredName(normalizedName) || normalizedName
 
   // Start with the core Embers identity (psychological foundation + 5 rules)
   let prompt = EMBER_CORE_IDENTITY
@@ -406,7 +410,7 @@ export function getPersonaPrompt(id: string, userName: string): string {
   prompt += `\n\nYOUR SPECIFIC STYLE (${persona.title}):\n${persona.styleAddition}`
 
   // Add user context
-  prompt += `\n\nUSER CONTEXT:\n- User's name: ${userName}\n- Use their name occasionally to feel personal, but not every response.`
+  prompt += `\n\nUSER CONTEXT:\n- User's full name: ${normalizedName}\n- Preferred short name: ${preferredName}\n- Use their preferred short name occasionally to feel personal, but not every response.\n- If they correct how they want to be addressed, follow their wording exactly.`
 
   return prompt
 }

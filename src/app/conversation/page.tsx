@@ -19,6 +19,7 @@ import { Message } from '@/types';
 import { userStyleService } from '@/lib/services/userStyleService';
 import { ERROR_MESSAGES } from '@/lib/errors/messages';
 import { useSubscription, getLocalStoryCount } from '@/lib/subscription/useSubscription';
+import { hasRecoverableDraft } from '@/lib/conversation/draftStorage';
 
 // --- Constants ---
 
@@ -109,7 +110,7 @@ function generateVoiceIntroduction(
 
 I'm here to help you preserve the stories and memories that matter most to you — the moments, the people, the experiences that shaped your life. Think of me as a patient friend who's genuinely curious about your life. You just talk, and I listen. I'll ask gentle questions to help your memories come alive.
 
-There's no rush, no pressure. Just your voice, your memories, and all the time you need. Everything you share is protected as we go, and when you're ready, your family can treasure these stories forever.`;
+There's no rush, no pressure. Just your voice, your memories, and all the time you need. Everything you share is saved safely, and when you're ready, your family can treasure these stories forever.`;
 
   const question = OPENING_QUESTIONS[Math.floor(Math.random() * OPENING_QUESTIONS.length)];
   return { greeting: introduction, question: `Let's start with something simple... ${question}` };
@@ -319,7 +320,7 @@ export default function ConversationPage() {
 
   const {
     resetSilence, startSilenceTracking, stopSilenceTracking, clearDraft,
-    saveDraftToLocalStorage, autoSaveState, syncStatus,
+    saveDraftToLocalStorage, syncStatus, autoSaveState,
   } = useVoiceGuidedAutoSave(conversation.messages, {
     onPlayVoice: playVoicePrompt,
     onAutoSave: handleAutoSave,
@@ -472,13 +473,7 @@ export default function ConversationPage() {
 
     // Check for draft — let draft recovery handle it if present
     try {
-      const draftStr = localStorage.getItem('embers_conversation_draft');
-      if (draftStr) {
-        const parsed = JSON.parse(draftStr);
-        // Handle both dualStorage format ({ data: { messages, ... } }) and legacy format ({ messages, ... })
-        const draft = parsed.data || parsed;
-        if (draft.messages && draft.messages.length >= 2) return;
-      }
+      if (hasRecoverableDraft()) return;
     } catch (err) {
       console.warn('[Conversation] Could not check for draft during auto-start:', err);
     }
@@ -496,7 +491,7 @@ export default function ConversationPage() {
     setHasPlayedDraftRecoveryVoice(true);
     tts.stopAllAudio();
 
-    const prompt = `Welcome back. We protected a conversation on this device for you. Say "continue" to pick up where you left off, or say "start fresh" to begin a new conversation.`;
+    const prompt = `Welcome back. You have an unsaved conversation from earlier. Say "continue" to pick up where you left off, or say "start fresh" to begin a new conversation.`;
 
     await tts.playText(prompt, {
       onEnd: () => {
@@ -773,9 +768,9 @@ export default function ConversationPage() {
               </div>
             )}
             <h3 className="text-xl font-serif text-[#f9f7f2] mb-3">Welcome back</h3>
-            <p className="text-sm text-[#f9f7f2]/50 mb-2">A conversation is protected on this device.</p>
+            <p className="text-sm text-[#f9f7f2]/50 mb-2">You have an unsaved conversation from earlier.</p>
             <p className="text-xs text-[#f9f7f2]/30 mb-3">
-              Protected {new Date(story.recoveredDraft.savedAt).toLocaleString()}
+              Saved {new Date(story.recoveredDraft.savedAt).toLocaleString()}
             </p>
             <div className="bg-[#E86D48]/10 border border-[#E86D48]/20 rounded-xl p-3 mb-4">
               <p className="text-[#f9f7f2]/70 text-sm">
@@ -824,11 +819,11 @@ export default function ConversationPage() {
           <div className="flex items-center gap-4">
             {autoSaveState.hasDraft && (
               <div className="text-[11px] px-3 py-2 rounded-full border border-white/10 text-[#f9f7f2]/55">
-                {syncStatus === 'synced'
-                  ? 'Safe and backed up'
+                {syncStatus === 'error' || syncStatus === 'offline'
+                  ? 'Draft saved on this device'
                   : autoSaveState.lastSavedAt
-                    ? `Protected on this device`
-                    : 'Protecting…'}
+                    ? `Draft saved ${autoSaveState.lastSavedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                    : 'Draft saving'}
               </div>
             )}
             {conversation.messages.length >= 2 && (

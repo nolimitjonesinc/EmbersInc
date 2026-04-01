@@ -8,6 +8,7 @@ import { ConversationMemory } from '@/lib/memory/ConversationMemory';
 import { extractMemories } from '@/lib/memory/memoryExtractor';
 import { getPromptsForInterests, getRandomWarmPrompt } from '@/lib/prompts/promptSelector';
 import { ERROR_MESSAGES } from '@/lib/errors/messages';
+import { normalizeUserName } from '@/lib/utils/name';
 
 /**
  * Conversation Hook
@@ -69,7 +70,11 @@ export function useConversation(): UseConversationReturn {
   // Load user data on mount
   useEffect(() => {
     const storedName = localStorage.getItem('embers_user_name');
-    if (storedName) setUserName(storedName);
+    if (storedName) {
+      const normalizedName = normalizeUserName(storedName) || storedName.trim();
+      setUserName(normalizedName);
+      localStorage.setItem('embers_user_name', normalizedName);
+    }
 
     const storedPersona = localStorage.getItem('embers_preferred_persona');
     if (storedPersona) setPreferredPersona(storedPersona);
@@ -92,6 +97,19 @@ export function useConversation(): UseConversationReturn {
     setStarterPrompt(prompt);
   }, []);
 
+  const detectUserName = useCallback((userMessage: string, previousAssistantMessage?: string): string | null => {
+    const trimmedMessage = userMessage.trim();
+    const assistantAskedForName = previousAssistantMessage
+      ? /(what should i call you|what's your name|what is your name|your name|call you)/i.test(previousAssistantMessage)
+      : false;
+
+    if (assistantAskedForName || /^(?:hi[, ]+)?(?:my name is|name is|i am|i'm|im|call me|it's|it is|this is)\b/i.test(trimmedMessage)) {
+      return normalizeUserName(trimmedMessage);
+    }
+
+    return null;
+  }, []);
+
   // Name detection from conversation
   useEffect(() => {
     if (messages.length < 2) return;
@@ -99,22 +117,14 @@ export function useConversation(): UseConversationReturn {
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
     const prevMsg = messages[messages.length - 2];
 
-    if (
-      prevMsg?.role === 'assistant' &&
-      prevMsg.content.toLowerCase().includes('name') &&
-      lastUserMessage?.role === 'user'
-    ) {
-      const match =
-        lastUserMessage.content.match(/(?:i'm|i am|my name is|call me)\s+(\w+)/i) ||
-        lastUserMessage.content.match(/^(\w+)$/i);
-
-      if (match?.[1]) {
-        const name = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
-        setUserName(name);
-        localStorage.setItem('embers_user_name', name);
+    if (lastUserMessage?.role === 'user') {
+      const detectedName = detectUserName(lastUserMessage.content, prevMsg?.role === 'assistant' ? prevMsg.content : undefined);
+      if (detectedName) {
+        setUserName(detectedName);
+        localStorage.setItem('embers_user_name', detectedName);
       }
     }
-  }, [messages]);
+  }, [messages, detectUserName]);
 
   const sendMessage = useCallback(async (content: string): Promise<string | null> => {
     if (!content.trim() || isProcessing) return null;

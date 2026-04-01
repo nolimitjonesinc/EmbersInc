@@ -1,0 +1,15 @@
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e140] [cursor=pointer]:
+    - img [ref=e141]
+  - alert [ref=e144]
+  - generic [ref=e145]:
+    - generic [ref=e146]:
+      - button "Embers is speaking. Tap to stop." [ref=e168] [cursor=pointer]
+      - generic [ref=e169]:
+        - paragraph [ref=e170]: Hello, I'm Embers. I'm here to help you preserve the stories and memories that matter most to you — the moments, the people, the experiences that shaped your life. Think of me as a patient friend who's genuinely curious about your life. You just talk, and I listen. I'll ask gentle questions to help your memories come alive. There's no rush, no pressure. Just your voice, your memories, and all the time you need. Everything you share is saved safely, just for you. And when you're ready, your family can treasure these stories forever. First, what should I call you?
+        - paragraph [ref=e171]: Embers is speaking...
+      - generic [ref=e173]:
+        - textbox "Say or type your name..." [active] [ref=e174]
+        - paragraph [ref=e175]: Typing works too. No need to wrestle the microphone.
+        - button "That's my name" [disabled] [ref=e176]
+    - button "Reset (Dev)" [ref=e167]

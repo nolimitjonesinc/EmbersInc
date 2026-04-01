@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Message } from '@/types';
 import { userStyleService } from '@/lib/services/userStyleService';
+import { loadConversationDraft } from '@/lib/conversation/draftStorage';
 
 /**
  * Story Persistence Hook
@@ -105,16 +106,13 @@ export function useStoryPersistence(): UseStoryPersistenceReturn {
 
     // Check for recovered draft
     try {
-      const draftStr = localStorage.getItem('embers_conversation_draft');
-      if (draftStr) {
-        const draft = JSON.parse(draftStr);
-        if (draft.messages && draft.messages.length >= 2) {
-          setRecoveredDraft({
-            messages: draft.messages,
-            savedAt: new Date(draft.savedAt),
-          });
-          setShowDraftRecovery(true);
-        }
+      const loadedDraft = loadConversationDraft();
+      if (loadedDraft) {
+        setRecoveredDraft({
+          messages: loadedDraft.draft.messages,
+          savedAt: new Date(loadedDraft.draft.savedAt),
+        });
+        setShowDraftRecovery(true);
       }
     } catch (err) {
       console.warn('[StoryPersistence] Could not parse saved draft:', err);

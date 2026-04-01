@@ -1,0 +1,97 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - link "Embers" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: Embers
+        - generic [ref=e8]:
+          - link "Stories" [ref=e9] [cursor=pointer]:
+            - /url: /stories
+          - link "Life Book" [ref=e10] [cursor=pointer]:
+            - /url: /life-book
+          - link "Start" [ref=e11] [cursor=pointer]:
+            - /url: /onboarding
+    - main [ref=e12]:
+      - generic [ref=e13]:
+        - link "Tap to start speaking" [ref=e15] [cursor=pointer]:
+          - /url: /onboarding
+          - button "Tap to start speaking" [ref=e16]:
+            - paragraph [ref=e31]: tap to begin
+        - generic [ref=e32]:
+          - heading "Your stories deserve to live forever" [level=1] [ref=e33]
+          - paragraph [ref=e34]: Speak your memories. Let them become gifts for those you love—across time, across generations.
+        - generic [ref=e35]:
+          - link "Start" [ref=e36] [cursor=pointer]:
+            - /url: /onboarding
+            - text: Start
+          - paragraph [ref=e38]: Just your email, your voice, and your memories.
+        - generic [ref=e39]:
+          - generic [ref=e40]: Discover
+          - img [ref=e41]
+      - generic [ref=e45]:
+        - generic [ref=e46]: “
+        - blockquote [ref=e47]: It was Christmas 1952, and we had this beautiful pine tree that barely fit through the door. The star on top was bent from where it hit the ceiling, but Mom said it looked like it was winking at us...
+        - paragraph [ref=e48]: A memory preserved forever
+      - generic [ref=e50]:
+        - heading "As natural as a conversation" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]: "01"
+            - heading "Speak" [level=3] [ref=e55]
+            - paragraph [ref=e56]: Tap the ember and talk naturally. Share whatever comes to mind—a memory, a feeling, a moment.
+          - generic [ref=e57]:
+            - generic [ref=e58]: "02"
+            - heading "Listen" [level=3] [ref=e59]
+            - paragraph [ref=e60]: A patient companion asks gentle questions, helping you remember details you thought were lost.
+          - generic [ref=e61]:
+            - generic [ref=e62]: "03"
+            - heading "Preserve" [level=3] [ref=e63]
+            - paragraph [ref=e64]: Your stories become part of your Life Book—organized, searchable, ready to share.
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - heading "Your Life Book" [level=2] [ref=e68]
+          - paragraph [ref=e69]: Every story finds its place in seven meaningful chapters
+        - generic [ref=e70]:
+          - heading "Who I Am" [level=3] [ref=e73] [cursor=pointer]
+          - heading "Where I Come From" [level=3] [ref=e76] [cursor=pointer]
+          - heading "What I've Loved" [level=3] [ref=e79] [cursor=pointer]
+          - heading "What I've Learned" [level=3] [ref=e82] [cursor=pointer]
+          - heading "What's Been Hard" [level=3] [ref=e85] [cursor=pointer]
+          - heading "Still Figuring Out" [level=3] [ref=e88] [cursor=pointer]
+          - heading "What I Want You to Know" [level=3] [ref=e91] [cursor=pointer]
+          - link "Explore →" [ref=e92] [cursor=pointer]:
+            - /url: /life-book
+            - generic [ref=e93]: Explore →
+      - generic [ref=e95]:
+        - heading "Designed with care" [level=2] [ref=e96]
+        - generic [ref=e97]:
+          - generic [ref=e100]:
+            - heading "Voice first" [level=3] [ref=e101]
+            - paragraph [ref=e102]: No typing required. Just speak naturally, like talking to an old friend.
+          - generic [ref=e105]:
+            - heading "Patient and kind" [level=3] [ref=e106]
+            - paragraph [ref=e107]: Take all the time you need. Pause, think, remember. There is no rush here.
+          - generic [ref=e110]:
+            - heading "Clear and readable" [level=3] [ref=e111]
+            - paragraph [ref=e112]: Large text, high contrast, intuitive flow. Designed for comfort.
+          - generic [ref=e115]:
+            - heading "Private and secure" [level=3] [ref=e116]
+            - paragraph [ref=e117]: Your stories are yours. Share only what you choose, with whom you choose.
+      - generic [ref=e120]:
+        - heading "Your family is waiting to hear your story" [level=2] [ref=e123]
+        - paragraph [ref=e124]: Every memory you share becomes a gift that transcends time.
+        - link "Start" [ref=e125] [cursor=pointer]:
+          - /url: /onboarding
+    - contentinfo [ref=e126]:
+      - generic [ref=e127]:
+        - generic [ref=e130]: Embers
+        - paragraph [ref=e131]: © 2026 Embers Inc. Preserving stories for generations.
+        - generic [ref=e132]:
+          - link "Privacy" [ref=e133] [cursor=pointer]:
+            - /url: /privacy
+          - link "Terms" [ref=e134] [cursor=pointer]:
+            - /url: /terms
+  - button "Open Next.js Dev Tools" [ref=e140] [cursor=pointer]:
+    - img [ref=e141]
+  - alert [ref=e144]

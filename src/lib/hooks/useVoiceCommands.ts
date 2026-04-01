@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { normalizeUserName } from '@/lib/utils/name';
 
 // Web Speech API type declarations
 interface SpeechRecognitionEvent extends Event {
@@ -72,20 +73,16 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
   } = options;
 
   const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
+  const [isSupported] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  });
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isListeningRef = useRef(false);
-
-  // Check for browser support
-  useEffect(() => {
-    const SpeechRecognition =
-      typeof window !== 'undefined' &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition);
-    setIsSupported(!!SpeechRecognition);
-  }, []);
+  const startListeningRef = useRef<() => void>(() => {});
 
   // Detect if transcript contains an affirmative response
   const isAffirmative = useCallback((text: string): boolean => {
@@ -142,29 +139,9 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
     const spelled = parseSpelledName(text);
     if (spelled) return spelled;
 
-    // Otherwise treat as spoken name
-    // Handle "my name is X" or "call me X" patterns
-    const patterns = [
-      /my name is (\w+)/i,
-      /i'm (\w+)/i,
-      /i am (\w+)/i,
-      /call me (\w+)/i,
-      /it's (\w+)/i,
-      /^(\w+)$/i, // Just the name
-    ];
-
-    for (const pattern of patterns) {
-      const match = text.trim().match(pattern);
-      if (match && match[1]) {
-        const name = match[1];
-        return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-      }
-    }
-
-    // Fallback: take first word and capitalize
-    const firstWord = text.trim().split(/\s+/)[0];
-    if (firstWord && firstWord.length >= 2) {
-      return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+    const normalized = normalizeUserName(text);
+    if (normalized) {
+      return normalized;
     }
 
     return text.trim();
@@ -249,7 +226,7 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
       if (continuous && enabled) {
         setTimeout(() => {
           if (enabled && !isListeningRef.current) {
-            startListening();
+            startListeningRef.current();
           }
         }, 100);
       }
@@ -258,6 +235,10 @@ export function useVoiceCommands(options: VoiceCommandsOptions = {}) {
     recognitionRef.current = recognition;
     recognition.start();
   }, [isSupported, enabled, continuous, stopOnCommand, detectCommand, onCommand, onTranscript, onListeningChange]);
+
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {

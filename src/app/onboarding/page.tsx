@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FlameButton } from '@/components/conversation/FlameButton'
 import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands'
+import { getPreferredName, normalizeUserName } from '@/lib/utils/name'
 
 /**
  * Voice-First Conversational Onboarding
@@ -58,6 +59,7 @@ export default function OnboardingPage() {
   const [phase, setPhase] = useState<Phase>('tap-to-start')
   const [userName, setUserName] = useState('')
   const [typedName, setTypedName] = useState('')
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   // Embers' voice state
   const [isEmberSpeaking, setIsEmberSpeaking] = useState(false)
@@ -162,6 +164,13 @@ export default function OnboardingPage() {
       audioRef.current = null
     }
   }, [])
+
+  const stopEmberSpeech = useCallback(() => {
+    clearIdleTimer()
+    stopAllAudio()
+    isSpeakingRef.current = false
+    setIsEmberSpeaking(false)
+  }, [clearIdleTimer, stopAllAudio])
 
   // Play pre-generated static audio (instant, no API call)
   const playStaticAudio = useCallback((audioPath: string, text: string, listenAfter = true) => {
@@ -271,7 +280,7 @@ export default function OnboardingPage() {
   // ============================================
 
   const goToPhase = useCallback((nextPhase: Phase, data?: { name?: string }) => {
-    const name = data?.name || userName
+    const name = getPreferredName(data?.name || userName)
     setPhase(nextPhase)
     resetTranscript()
 
@@ -313,8 +322,9 @@ export default function OnboardingPage() {
 
     const existingName = localStorage.getItem('embers_user_name')
     if (existingName) {
-      setUserName(existingName)
-      setTypedName(existingName)
+      const normalizedName = normalizeUserName(existingName) || existingName.trim()
+      setUserName(normalizedName)
+      setTypedName(normalizedName)
     }
   }, [])
 
@@ -324,14 +334,27 @@ export default function OnboardingPage() {
 
     if (existingName) {
       // Returning user - welcome back
-      setUserName(existingName)
+      const normalizedName = normalizeUserName(existingName) || existingName.trim()
+      const preferredName = getPreferredName(normalizedName)
+      setUserName(normalizedName)
       setPhase('ready')
-      speakEmber(`Welcome back, ${existingName}! It's Embers. Ready to share another story? Just say "let's go" when you're ready.`)
+      speakEmber(`Welcome back, ${preferredName}! It's Embers. Ready to share another story? Just say "let's go" when you're ready.`)
     } else {
       // New user - full introduction
       goToPhase('introduction')
     }
   }, [speakEmber, goToPhase])
+
+  // Keep typed fallback ready instead of hiding it behind voice timing.
+  useEffect(() => {
+    if (phase === 'introduction' || phase === 'ask-name') {
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus()
+      }, isEmberSpeaking ? 150 : 0)
+
+      return () => clearTimeout(timer)
+    }
+  }, [phase, isEmberSpeaking])
 
   // ============================================
   // VOICE INPUT PROCESSING
@@ -347,7 +370,7 @@ export default function OnboardingPage() {
       case 'ask-name': {
         // Listen for a name
         if (lower.length >= 2) {
-          const parsedName = parseSpokenName(transcript)
+          const parsedName = normalizeUserName(parseSpokenName(transcript))
           if (parsedName && parsedName.length >= 2) {
             stopListening()
             setUserName(parsedName)
@@ -368,7 +391,7 @@ export default function OnboardingPage() {
           goToPhase('ask-name')
         } else if (lower.length >= 2) {
           // They're saying their name again
-          const parsedName = parseSpokenName(transcript)
+          const parsedName = normalizeUserName(parseSpokenName(transcript))
           if (parsedName && parsedName.length >= 2) {
             stopListening()
             setUserName(parsedName)
@@ -399,7 +422,14 @@ export default function OnboardingPage() {
 
   // Flame tap in active phases — toggle listening or re-enable it
   const handleFlameClick = useCallback(() => {
-    if (isEmberSpeaking) return
+    if (isEmberSpeaking) {
+      stopEmberSpeech()
+      if (phase === 'introduction' || phase === 'ask-name' || phase === 'confirm-name' || phase === 'ready') {
+        resetTranscript()
+        startListening()
+      }
+      return
+    }
 
     if (isListening) {
       manualStopRef.current = true
@@ -408,29 +438,32 @@ export default function OnboardingPage() {
       resetTranscript()
       startListening()
     }
-  }, [isEmberSpeaking, isListening, stopListening, resetTranscript, startListening])
+  }, [isEmberSpeaking, isListening, phase, stopListening, resetTranscript, startListening, stopEmberSpeech])
 
   // ============================================
   // TAP HANDLERS (BACKUP)
   // ============================================
 
   const handleNameSubmit = () => {
-    if (typedName.trim().length >= 2) {
+    const name = normalizeUserName(typedName)
+    if (name) {
+      stopEmberSpeech()
       stopListening()
-      const name = typedName.trim()
       setUserName(name)
-      localStorage.setItem('embers_user_name', name)
-      goToPhase('choose-style', { name })
+      setTypedName(name)
+      goToPhase('confirm-name', { name })
     }
   }
 
   const handleNameConfirmYes = () => {
+    stopEmberSpeech()
     stopListening()
     localStorage.setItem('embers_user_name', userName)
     goToPhase('choose-style', { name: userName })
   }
 
   const handleNameConfirmNo = () => {
+    stopEmberSpeech()
     stopListening()
     setUserName('')
     setTypedName('')
@@ -449,6 +482,7 @@ export default function OnboardingPage() {
   }
 
   const handleStart = () => {
+    stopEmberSpeech()
     stopListening()
     goToPhase('starting')
     // Set flags so conversation page auto-starts voice with SHORT greeting
@@ -547,7 +581,7 @@ export default function OnboardingPage() {
               className="mt-8 text-center"
             >
               <p className="text-2xl text-[#f9f7f2]/80 font-serif mb-2">
-                Hello, I'm Embers
+                Hello, I&apos;m Embers
               </p>
               <p className="text-lg text-[#f9f7f2]/50">
                 Tap to begin
@@ -556,7 +590,7 @@ export default function OnboardingPage() {
           )}
 
           {/* NAME INPUT (after introduction) */}
-          {(phase === 'introduction' || phase === 'ask-name') && !isEmberSpeaking && (
+          {(phase === 'introduction' || phase === 'ask-name') && (
             <motion.div
               key="name-input"
               initial={{ opacity: 0, y: 20 }}
@@ -566,6 +600,7 @@ export default function OnboardingPage() {
             >
               <div className="space-y-4">
                 <input
+                  ref={nameInputRef}
                   type="text"
                   placeholder="Say or type your name..."
                   value={typedName}
@@ -573,13 +608,16 @@ export default function OnboardingPage() {
                   onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
                   className="w-full text-center text-2xl py-4 px-6 bg-white/5 border border-white/20 rounded-2xl text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50 transition-colors"
                 />
+                <p className="text-center text-sm text-[#f9f7f2]/45">
+                  {isListening ? 'Listening now. You can still type if the mic misses it.' : 'Typing works too. No need to wrestle the microphone.'}
+                </p>
                 <button
                   onClick={handleNameSubmit}
                   disabled={typedName.trim().length < 2}
                   className="w-full py-4 rounded-full text-white font-medium text-lg disabled:opacity-30 transition-all"
                   style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
                 >
-                  That's my name
+                  That&apos;s my name
                 </button>
               </div>
             </motion.div>
@@ -606,7 +644,7 @@ export default function OnboardingPage() {
                   className="flex-1 py-4 rounded-full text-white font-medium text-lg transition-all"
                   style={{ background: 'linear-gradient(135deg, #E86D48, #c45a3a)' }}
                 >
-                  Yes, that's me
+                  Yes, that&apos;s me
                 </button>
               </div>
             </motion.div>
@@ -665,10 +703,10 @@ export default function OnboardingPage() {
                   boxShadow: '0 0 30px rgba(232, 109, 72, 0.3)'
                 }}
               >
-                Let's share a story
+                Let&apos;s share a story
               </button>
               <p className="text-center text-[#f9f7f2]/40 text-sm mt-4">
-                Or just say "let's go"
+                Or just say &quot;let&apos;s go&quot;
               </p>
             </motion.div>
           )}
@@ -703,7 +741,7 @@ export default function OnboardingPage() {
               </div>
               {transcript && (
                 <p className="text-[#f9f7f2]/50 text-sm mt-2 text-center max-w-xs">
-                  "{transcript}"
+                  &quot;{transcript}&quot;
                 </p>
               )}
             </div>

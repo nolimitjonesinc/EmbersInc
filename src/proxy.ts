@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession, isProtectedRoute } from '@/lib/supabase/middleware'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Update the Supabase session
   const response = await updateSession(request)
 
@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
     // (prevents silently disabling all auth in production)
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn(
-        '[Middleware] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing. ' +
+        '[Proxy] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing. ' +
         'Protected routes will redirect to login. Set these env vars to enable authentication.'
       )
       const loginUrl = new URL('/login', request.url)

@@ -1,0 +1,8 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: Hello, I'm Embers
+      - paragraph [ref=e6]: Tap to begin
+    - button "Reset (Dev)" [ref=e7]
+  - button "Open Next.js Dev Tools" [ref=e13] [cursor=pointer]:
+    - img [ref=e14]

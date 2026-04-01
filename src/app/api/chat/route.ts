@@ -15,6 +15,7 @@ import { softAuth } from '@/lib/auth/getAuthContext'
 import { validateChatInput } from '@/lib/auth/validateChatInput'
 import { trimConversationHistory } from '@/lib/chat/trimConversationHistory'
 import { ERROR_MESSAGES } from '@/lib/errors/messages'
+import { getPreferredName, normalizeUserName } from '@/lib/utils/name'
 
 export const runtime = 'edge'
 
@@ -52,11 +53,12 @@ function getPersonalizedOpening(params: {
     preferredTimeframes = [],
     commonThemes = []
   } = params
+  const preferredName = getPreferredName(userName) || userName
 
   // Use the prompt selector to get a personalized opening
   const openingMessage = generateOpeningMessage({
     isNewUser: !isReturningUser,
-    userName,
+    userName: preferredName,
     selectedInterests,
     frequentlyMentionedPeople,
     preferredTimeframes,
@@ -66,14 +68,14 @@ function getPersonalizedOpening(params: {
   // Add persona-specific opening flavor based on new archetype system
   const personaFlavors: Record<string, string> = {
     ember: '', // Default Embers uses the opening as-is
-    warmWitness: `${userName}, before we begin - I want you to know this is all about what YOU want to share. `,
-    gentleExcavator: `${userName}, I'm so glad you're here. `,
-    curiousCompanion: `Hey ${userName}! `,
-    intimateExplorer: `${userName}, thank you for being here. `,
-    playfulFriend: `Alright ${userName}, let's do this! `,
-    griefHolder: `${userName}, I'm here. Take all the time you need. `,
-    wiseElder: `Oh, ${userName}, sweetheart, how lovely to see you. `,
-    fascinatedYouth: `${userName}! I'm so excited to hear your stories! `
+    warmWitness: `${preferredName}, before we begin - I want you to know this is all about what YOU want to share. `,
+    gentleExcavator: `${preferredName}, I'm so glad you're here. `,
+    curiousCompanion: `Hey ${preferredName}! `,
+    intimateExplorer: `${preferredName}, thank you for being here. `,
+    playfulFriend: `Alright ${preferredName}, let's do this! `,
+    griefHolder: `${preferredName}, I'm here. Take all the time you need. `,
+    wiseElder: `Oh, ${preferredName}, sweetheart, how lovely to see you. `,
+    fascinatedYouth: `${preferredName}! I'm so excited to hear your stories! `
   }
 
   const flavor = personaFlavors[personaId] || ''
@@ -183,10 +185,11 @@ export async function POST(request: NextRequest) {
       preferredTimeframes = [],
       commonThemes = []
     } = body
+    const normalizedUserName = normalizeUserName(userName) || 'friend'
 
     // Get persona-specific prompt
     const personaData = getPersona(persona)
-    const basePrompt = getPersonaPrompt(persona, userName)
+    const basePrompt = getPersonaPrompt(persona, normalizedUserName)
 
     // Extract the last user message for emotional state detection
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content
@@ -219,7 +222,7 @@ export async function POST(request: NextRequest) {
     // If first message, add personalized opening
     if (isFirstMessage && conversationHistory.length === 1) {
       const openingContent = getPersonalizedOpening({
-        userName,
+        userName: normalizedUserName,
         personaId: personaData.id,
         selectedInterests,
         isReturningUser,
