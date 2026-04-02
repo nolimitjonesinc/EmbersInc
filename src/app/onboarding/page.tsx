@@ -280,7 +280,8 @@ export default function OnboardingPage() {
   // ============================================
 
   const goToPhase = useCallback((nextPhase: Phase, data?: { name?: string }) => {
-    const name = getPreferredName(data?.name || userName)
+    const fullName = normalizeUserName(data?.name || userName) || (data?.name || userName)
+    const preferredName = getPreferredName(fullName) || fullName
     setPhase(nextPhase)
     resetTranscript()
 
@@ -294,7 +295,7 @@ export default function OnboardingPage() {
           break
         case 'confirm-name':
           // Dynamic - includes user's name
-          speakEmber(DIALOGUE.confirmName(name))
+          speakEmber(DIALOGUE.confirmName(fullName))
           break
         case 'choose-style':
           // No voice listening needed — user taps a card
@@ -302,11 +303,11 @@ export default function OnboardingPage() {
           break
         case 'ready':
           // Dynamic - includes user's name
-          speakEmber(DIALOGUE.ready(name))
+          speakEmber(DIALOGUE.ready(preferredName))
           break
         case 'starting':
           // Dynamic - includes user's name
-          speakEmber(DIALOGUE.starting(name), false)
+          speakEmber(DIALOGUE.starting(preferredName), false)
           break
       }
     }, 300)
