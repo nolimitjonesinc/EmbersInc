@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FlameButton } from '@/components/conversation/FlameButton'
 import { useVoiceCommands } from '@/lib/hooks/useVoiceCommands'
+import { useAudioRecorder } from '@/lib/speech/useAudioRecorder'
 import { getPreferredName, normalizeUserName } from '@/lib/utils/name'
 
 /**
@@ -59,6 +60,8 @@ export default function OnboardingPage() {
   const [phase, setPhase] = useState<Phase>('tap-to-start')
   const [userName, setUserName] = useState('')
   const [typedName, setTypedName] = useState('')
+  const [recordedTranscript, setRecordedTranscript] = useState('')
+  const [isStandaloneVoiceFallback, setIsStandaloneVoiceFallback] = useState(false)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   // Embers' voice state
@@ -86,6 +89,23 @@ export default function OnboardingPage() {
     stopOnCommand: false,
     enabled: true,
   })
+
+  const {
+    isRecording: isFallbackRecording,
+    isTranscribing: isFallbackTranscribing,
+    startRecording: startFallbackRecording,
+    stopRecording: stopFallbackRecording,
+    cancelRecording: cancelFallbackRecording,
+  } = useAudioRecorder({
+    onTranscriptionComplete: (text) => {
+      setRecordedTranscript(text)
+    },
+    onError: () => {
+      setEmberText("I couldn't hear that clearly. Please try saying your name again.")
+    },
+  })
+
+  const shouldUseRecordedVoice = isStandaloneVoiceFallback || !isVoiceSupported
 
   // ============================================
   // EMBER'S DIALOGUE
@@ -133,6 +153,18 @@ export default function OnboardingPage() {
       clearIdleTimer()
     }
   }, [transcript, clearIdleTimer])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const isIos = /iPhone|iPad|iPod/i.test(window.navigator.userAgent)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+      // Safari-only property, but harmless to check.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Boolean((window.navigator as any).standalone)
+
+    setIsStandaloneVoiceFallback(isIos && isStandalone)
+  }, [])
 
   // ============================================
   // VOICE PLAYBACK
@@ -190,7 +222,7 @@ export default function OnboardingPage() {
       isSpeakingRef.current = false
       setIsEmberSpeaking(false)
       startIdleTimer()
-      if (listenAfter && isVoiceSupported) {
+      if (listenAfter && isVoiceSupported && !shouldUseRecordedVoice) {
         setTimeout(() => {
           resetTranscript()
           startListening()
@@ -210,7 +242,7 @@ export default function OnboardingPage() {
       setIsEmberSpeaking(false)
       speakEmberRef.current(text, listenAfter)
     })
-  }, [isVoiceSupported, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
+  }, [isVoiceSupported, shouldUseRecordedVoice, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
 
   // Generate speech via TTS API (for dynamic text like names)
   const speakEmber = useCallback(async (text: string, listenAfter = true) => {
@@ -244,7 +276,7 @@ export default function OnboardingPage() {
         URL.revokeObjectURL(audioUrl)
         startIdleTimer()
 
-        if (listenAfter && isVoiceSupported) {
+        if (listenAfter && isVoiceSupported && !shouldUseRecordedVoice) {
           setTimeout(() => {
             resetTranscript()
             startListening()
@@ -263,14 +295,14 @@ export default function OnboardingPage() {
       console.error('TTS error:', error)
       isSpeakingRef.current = false
       setIsEmberSpeaking(false)
-      if (listenAfter && isVoiceSupported) {
+      if (listenAfter && isVoiceSupported && !shouldUseRecordedVoice) {
         setTimeout(() => {
           resetTranscript()
           startListening()
         }, 400)
       }
     }
-  }, [isVoiceSupported, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
+  }, [isVoiceSupported, shouldUseRecordedVoice, resetTranscript, startListening, stopAllAudio, clearIdleTimer, startIdleTimer])
 
   // Wire up speakEmber ref for idle timer callback
   speakEmberRef.current = speakEmber
@@ -421,8 +453,76 @@ export default function OnboardingPage() {
   }, [transcript, phase, isEmberSpeaking, userName, stopListening, resetTranscript,
       goToPhase, parseSpokenName, isAffirmative, isNegative, router])
 
+  useEffect(() => {
+    if (!recordedTranscript || isEmberSpeaking) return
+
+    const normalizedTranscript = recordedTranscript.trim()
+    const lower = normalizedTranscript.toLowerCase()
+
+    switch (phase) {
+      case 'introduction':
+      case 'ask-name': {
+        const parsedName = normalizeUserName(parseSpokenName(normalizedTranscript))
+        if (parsedName && parsedName.length >= 2) {
+          setRecordedTranscript('')
+          setUserName(parsedName)
+          setTypedName(parsedName)
+          goToPhase('confirm-name', { name: parsedName })
+        }
+        break
+      }
+
+      case 'confirm-name': {
+        if (isAffirmative(lower)) {
+          setRecordedTranscript('')
+          localStorage.setItem('embers_user_name', userName)
+          goToPhase('choose-style', { name: userName })
+        } else if (isNegative(lower)) {
+          setRecordedTranscript('')
+          goToPhase('ask-name')
+        } else {
+          const parsedName = normalizeUserName(parseSpokenName(normalizedTranscript))
+          if (parsedName && parsedName.length >= 2) {
+            setRecordedTranscript('')
+            setUserName(parsedName)
+            setTypedName(parsedName)
+            goToPhase('confirm-name', { name: parsedName })
+          }
+        }
+        break
+      }
+
+      case 'ready': {
+        if (isAffirmative(lower) || lower.includes("let's go") || lower.includes('start') || lower.includes('ready')) {
+          setRecordedTranscript('')
+          goToPhase('starting')
+          sessionStorage.removeItem('embers_intro_played')
+          sessionStorage.setItem('embers_auto_start_conversation', 'true')
+          sessionStorage.setItem('embers_came_from_onboarding', 'true')
+          setTimeout(() => {
+            router.push('/conversation')
+          }, 3000)
+        }
+        break
+      }
+    }
+  }, [recordedTranscript, phase, isEmberSpeaking, userName, goToPhase, parseSpokenName, isAffirmative, isNegative, router])
+
   // Flame tap in active phases — toggle listening or re-enable it
   const handleFlameClick = useCallback(() => {
+    if (shouldUseRecordedVoice) {
+      if (isFallbackTranscribing) return
+
+      if (isFallbackRecording) {
+        stopFallbackRecording()
+      } else {
+        stopEmberSpeech()
+        setRecordedTranscript('')
+        startFallbackRecording()
+      }
+      return
+    }
+
     if (isEmberSpeaking) {
       stopEmberSpeech()
       if (phase === 'introduction' || phase === 'ask-name' || phase === 'confirm-name' || phase === 'ready') {
@@ -439,7 +539,20 @@ export default function OnboardingPage() {
       resetTranscript()
       startListening()
     }
-  }, [isEmberSpeaking, isListening, phase, stopListening, resetTranscript, startListening, stopEmberSpeech])
+  }, [
+    shouldUseRecordedVoice,
+    isFallbackRecording,
+    isFallbackTranscribing,
+    stopFallbackRecording,
+    stopEmberSpeech,
+    startFallbackRecording,
+    isEmberSpeaking,
+    isListening,
+    phase,
+    stopListening,
+    resetTranscript,
+    startListening,
+  ])
 
   // ============================================
   // TAP HANDLERS (BACKUP)
@@ -498,10 +611,11 @@ export default function OnboardingPage() {
   // Cleanup audio and timers on unmount
   useEffect(() => {
     return () => {
+      cancelFallbackRecording()
       stopAllAudio()
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
     }
-  }, [stopAllAudio])
+  }, [cancelFallbackRecording, stopAllAudio])
 
   // ============================================
   // RENDER
@@ -531,9 +645,9 @@ export default function OnboardingPage() {
           className={`relative ${phase === 'tap-to-start' ? 'cursor-pointer' : ''}`}
         >
           <FlameButton
-            isListening={isListening}
+            isListening={shouldUseRecordedVoice ? isFallbackRecording : isListening}
             isSpeaking={isEmberSpeaking}
-            isProcessing={false}
+            isProcessing={isFallbackTranscribing}
             onClick={phase === 'tap-to-start' ? handleTapToStart : handleFlameClick}
             size="large"
           />
@@ -610,7 +724,15 @@ export default function OnboardingPage() {
                   className="w-full text-center text-2xl py-4 px-6 bg-white/5 border border-white/20 rounded-2xl text-[#f9f7f2] placeholder:text-[#f9f7f2]/30 focus:outline-none focus:border-[#E86D48]/50 transition-colors"
                 />
                 <p className="text-center text-sm text-[#f9f7f2]/45">
-                  {isListening ? 'Listening now. You can still type if the mic misses it.' : 'Typing works too. No need to wrestle the microphone.'}
+                  {isFallbackTranscribing
+                    ? 'Turning your voice into text...'
+                    : shouldUseRecordedVoice
+                      ? isFallbackRecording
+                        ? 'Recording now. Tap the flame again when you finish saying your name.'
+                        : 'Tap the flame, say your name, then tap it again.'
+                      : isListening
+                        ? 'Listening now. You can still type if the mic misses it.'
+                        : 'Typing works too. No need to wrestle the microphone.'}
                 </p>
                 <button
                   onClick={handleNameSubmit}
@@ -728,7 +850,7 @@ export default function OnboardingPage() {
 
       {/* Listening Indicator */}
       <AnimatePresence>
-        {isListening && (
+        {(shouldUseRecordedVoice ? isFallbackRecording : isListening) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -738,11 +860,13 @@ export default function OnboardingPage() {
             <div className="bg-[#1a1714] border border-[#E86D48]/30 rounded-2xl px-6 py-3 shadow-xl">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-[#f9f7f2]/80 text-sm font-medium">Listening...</span>
+                <span className="text-[#f9f7f2]/80 text-sm font-medium">
+                  {shouldUseRecordedVoice ? 'Recording...' : 'Listening...'}
+                </span>
               </div>
-              {transcript && (
+              {(shouldUseRecordedVoice ? recordedTranscript : transcript) && (
                 <p className="text-[#f9f7f2]/50 text-sm mt-2 text-center max-w-xs">
-                  &quot;{transcript}&quot;
+                  &quot;{shouldUseRecordedVoice ? recordedTranscript : transcript}&quot;
                 </p>
               )}
             </div>
