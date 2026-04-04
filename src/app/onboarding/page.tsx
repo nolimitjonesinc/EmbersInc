@@ -253,6 +253,15 @@ export default function OnboardingPage() {
     setIsEmberSpeaking(true)
     setEmberText(text)
 
+    // Safety timeout: if audio never fires onended (common on mobile), force-unlock after 30s
+    const safetyTimer = setTimeout(() => {
+      if (isSpeakingRef.current) {
+        isSpeakingRef.current = false
+        setIsEmberSpeaking(false)
+        startIdleTimer()
+      }
+    }, 30000)
+
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -271,6 +280,7 @@ export default function OnboardingPage() {
       audioRef.current = audio
 
       audio.onended = () => {
+        clearTimeout(safetyTimer)
         isSpeakingRef.current = false
         setIsEmberSpeaking(false)
         URL.revokeObjectURL(audioUrl)
@@ -285,6 +295,7 @@ export default function OnboardingPage() {
       }
 
       audio.onerror = () => {
+        clearTimeout(safetyTimer)
         isSpeakingRef.current = false
         setIsEmberSpeaking(false)
         URL.revokeObjectURL(audioUrl)
@@ -292,6 +303,7 @@ export default function OnboardingPage() {
 
       await audio.play()
     } catch (error) {
+      clearTimeout(safetyTimer)
       console.error('TTS error:', error)
       isSpeakingRef.current = false
       setIsEmberSpeaking(false)
@@ -747,7 +759,7 @@ export default function OnboardingPage() {
           )}
 
           {/* NAME CONFIRM */}
-          {phase === 'confirm-name' && !isEmberSpeaking && (
+          {phase === 'confirm-name' && (
             <motion.div
               key="name-confirm"
               initial={{ opacity: 0, y: 20 }}
@@ -774,7 +786,7 @@ export default function OnboardingPage() {
           )}
 
           {/* CHOOSE STYLE */}
-          {phase === 'choose-style' && !isEmberSpeaking && (
+          {phase === 'choose-style' && (
             <motion.div
               key="choose-style"
               initial={{ opacity: 0, y: 20 }}
@@ -810,7 +822,7 @@ export default function OnboardingPage() {
           )}
 
           {/* READY */}
-          {phase === 'ready' && !isEmberSpeaking && (
+          {phase === 'ready' && (
             <motion.div
               key="ready"
               initial={{ opacity: 0, y: 20 }}
