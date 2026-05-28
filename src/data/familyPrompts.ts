@@ -337,6 +337,50 @@ const wisdomAndAdvice: PromptCategory = {
   ],
 }
 
+const betweenYouAndMe: PromptCategory = {
+  id: "children-between-us",
+  label: "Between You & Me",
+  description: "The tender, personal questions about us — our bond, your pride, and what you want me to carry forward",
+  icon: "🫂",
+  prompts: [
+    {
+      id: "children-between-us-1",
+      text: "What are your happiest memories of us?",
+      whyItWorks: "Invites them to relive shared joy — warm, open, and almost always emotional.",
+    },
+    {
+      id: "children-between-us-2",
+      text: "What was fatherhood like in those first few days after you had me?",
+      whyItWorks: "Anchors them to a specific, vivid moment of becoming a parent.",
+    },
+    {
+      id: "children-between-us-3",
+      text: "What have you learned about love, and what has it taught you?",
+      whyItWorks: "Broad enough to reach into any relationship — distills a lifetime of love into wisdom.",
+    },
+    {
+      id: "children-between-us-4",
+      text: "When was the moment you felt most proud of me?",
+      whyItWorks: "Pride is rarely spoken aloud — this gives them permission to say it directly.",
+    },
+    {
+      id: "children-between-us-5",
+      text: "What do you want or wish for most for your kids?",
+      whyItWorks: "Reveals their deepest hopes — often the things they never said out loud.",
+    },
+    {
+      id: "children-between-us-6",
+      text: "What’s the nicest thing I’ve ever done for you?",
+      whyItWorks: "Flips the usual direction of gratitude — unexpected and deeply moving.",
+    },
+    {
+      id: "children-between-us-7",
+      text: "What’s one thing you always want me to remember after you’ve gone?",
+      whyItWorks: "The most essential legacy question — distills everything into a single message to keep.",
+    },
+  ],
+}
+
 // ---- Grandchildren --------------------------------------------------------
 
 const kidFriendly: PromptCategory = {
@@ -626,6 +670,7 @@ const RELATIONSHIP_CATEGORIES: Record<RelationshipKey, PromptCategory[]> = {
     loveAndRelationships,
     workAndPurpose,
     wisdomAndAdvice,
+    betweenYouAndMe,
   ],
   grandchildren: [kidFriendly, teenQuestions, youngAdult],
   friends: [storiesBehindThePerson],
