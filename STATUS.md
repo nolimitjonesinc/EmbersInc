@@ -1,5 +1,5 @@
 # EmbersInc — Status
-_Auto-updated by Status Brain on every push. Last change: Add Status Brain workflow to automate status file updates._
+_Auto-updated by Status Brain on every push. Last change: Add Status Brain workflow and script for automated status tracking._
 
 **Status:** In progress  
 **What it is:** A voice-first web app that guides elders through recording life stories in conversation with an AI interviewer, saving them into publishable "Embers" with family sharing.  
