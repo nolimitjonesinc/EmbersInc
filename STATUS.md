@@ -1,5 +1,5 @@
 # EmbersInc — Status
-_Auto-updated by Status Brain on every push. Last change: Add Status Brain workflow and script for automated status tracking._
+_Auto-updated by Status Brain on every push. Last change: Add the 4-file project doc standard (CLAUDE.md, PROJECT.md, TASKS.md, STATUS.md)._
 
 **Status:** In progress  
 **What it is:** A voice-first web app that guides elders through recording life stories in conversation with an AI interviewer, saving them into publishable "Embers" with family sharing.  
@@ -21,14 +21,14 @@ _Auto-updated by Status Brain on every push. Last change: Add Status Brain workf
 - **Error boundaries** — React error catching, honest user-facing messages
 
 ## Recent changes (newest first)
-- 2026-07-20 — Add Status Brain workflow and script for automated status tracking
+- 2026-08-04 — Add the 4-file project doc standard (CLAUDE.md, PROJECT.md, TASKS.md, STATUS.md)
+- 2026-07-20 — Harden Status Brain: retry-with-rebase on push, workflow/script automation
 - 2026-05-28 — Add "Between You & Me" prompt category for child-to-parent questions
 - 2026-04-04 — Fix mobile onboarding UI lock-up on TTS playback
 - 2026-04-01 — Add iPhone web-app voice fallback for onboarding
 - 2026-04-01 — Fix onboarding full-name confirmation and build blockers in family/draft flows
 - 2026-03-31 — Merge Phase 2 (voice-based phone OTP enrollment, speech parser) and Phase 1 (invisible save crash cushion)
 - 2026-03-12 — Add Family Prompts feature + pre-launch security hardening
-- 2026-02-18 — Fix silent failures: dead sync queue, draft save bugs, TTS error handling
 
 ## Reusable parts (for other projects)
 - **Invisible Save** — auto-saving drafts on app rotation/inactivity without user prompts — `src/lib/conversation/draftStorage.ts`, `src/lib/hooks/useVoiceGuidedAutoSave.ts`
