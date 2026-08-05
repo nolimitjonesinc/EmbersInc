@@ -1,4 +1,21 @@
-# EmbersInc
+# EmbersInc — start here
+
+**Before answering ANY question about this project, or proposing ANY change:
+read `PROJECT.md` in this folder.**
+
+It covers what this is, how it works, the design rules that must not be broken,
+and what's already known-missing. Check every new request against its
+"Rules of the house" section before agreeing to build it.
+
+Other docs here:
+- `TASKS.md` — what's next (high-level; see also the `tasks/` directory below for the detailed, section-by-section checklists)
+- `README.md` — setup/deploy instructions
+- `../build-logs/logs/embers-web.md` — *why* decisions were made, and what was already tried and rejected (not written yet)
+
+When you add, remove, or meaningfully change a feature, update `PROJECT.md` in
+the same session. A stale doc is worse than no doc.
+
+---
 
 ## Task Tracking (CRITICAL — READ THIS FIRST)
 
