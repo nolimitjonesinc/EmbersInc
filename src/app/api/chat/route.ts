@@ -238,8 +238,9 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = getOpenAIClient()
+    // Cost: gpt-4o-mini for live chat — same function, faster + ~16x cheaper than gpt-4o. Full gpt-4o kept for ghostwriter prose where quality matters.
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [systemMessage, ...conversationHistory],
       temperature: 0.75, // Slightly higher for more natural conversation
       max_tokens: 300,

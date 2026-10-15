@@ -41,10 +41,11 @@ export async function POST(request: NextRequest) {
 
     const openai = getOpenAIClient();
 
-    // Use Whisper API for transcription
+    // Use OpenAI transcription (gpt-4o-mini-transcribe) for transcription
+    // Cost + accuracy: gpt-4o-mini-transcribe is half the price of whisper-1 ($0.003 vs $0.006/min) and more accurate, same API shape.
     const transcription = await openai.audio.transcriptions.create({
       file: audioFile,
-      model: 'whisper-1',
+      model: 'gpt-4o-mini-transcribe',
       language: 'en',
       response_format: 'text',
     });

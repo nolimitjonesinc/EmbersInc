@@ -87,8 +87,9 @@ ${content.slice(0, 1500)}
 
 Return only the title, no quotes or explanation:`
 
+  // Cost: title is trivial — gpt-4o-mini is plenty, same output. Prose/polish/expand below stay on gpt-4o for memoir quality.
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.8,
     max_tokens: 50,

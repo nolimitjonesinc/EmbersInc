@@ -54,6 +54,8 @@ export function useTTSPlayback(): UseTTSPlaybackReturn {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isSpeakingRef = useRef(false);
+  // In-session cache: same line spoken twice reuses audio, no second API call. Max 20, oldest evicted.
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
 
   const stopAllAudio = useCallback(() => {
     if (audioRef.current) {
@@ -62,9 +64,79 @@ export function useTTSPlayback(): UseTTSPlaybackReturn {
       audioRef.current.onerror = null;
       audioRef.current = null;
     }
+    // Stop browser-voice fallback too, if it's speaking.
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  // Browser voice fallback (Road-Lore / Loomiverse pattern): if /api/tts fails, dad still hears something.
+  // Uses built-in device voice, warm + slightly slow. No API cost, no key needed.
+  const speakWithBrowser = useCallback((text: string, options?: PlayTextOptions): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !window.speechSynthesis) {
+        options?.onError?.();
+        resolve();
+        return;
+      }
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      const voices = synth.getVoices();
+      const pick = voices.find((v) => v.name.includes('Samantha')) || voices.find((v) => v.lang.startsWith('en-US') && v.name.toLowerCase().includes('female')) || voices.find((v) => v.lang.startsWith('en-US')) || voices[0];
+      if (pick) utterance.voice = pick;
+      setIsLoadingTTS(false);
+      setWarmLoadingMessage('');
+      isSpeakingRef.current = true;
+      setIsSpeaking(true);
+      utterance.onend = () => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        options?.onEnd?.();
+        resolve();
+      };
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        options?.onError?.();
+        resolve();
+      };
+      synth.speak(utterance);
+    });
   }, []);
 
   const playText = useCallback(async (text: string, options?: PlayTextOptions) => {
+    // Cache hit: same line spoken before in this session — play instantly, no API call.
+    const cachedUrl = audioCacheRef.current.get(text);
+    if (cachedUrl) {
+      stopAllAudio();
+      const cachedAudio = new Audio(cachedUrl);
+      audioRef.current = cachedAudio;
+      setIsLoadingTTS(false);
+      setWarmLoadingMessage('');
+      isSpeakingRef.current = true;
+      setIsSpeaking(true);
+      cachedAudio.onended = () => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        options?.onEnd?.();
+      };
+      cachedAudio.onerror = async () => {
+        audioCacheRef.current.delete(text);
+        await speakWithBrowser(text, options);
+      };
+      try {
+        await cachedAudio.play();
+        return;
+      } catch {
+        await speakWithBrowser(text, options);
+        return;
+      }
+    }
+
     try {
       setIsLoadingTTS(true);
       setWarmLoadingMessage(
@@ -82,6 +154,17 @@ export function useTTSPlayback(): UseTTSPlaybackReturn {
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      // Cache it (max 20, evict oldest). Don't revoke cached URLs on end — they're reused.
+      audioCacheRef.current.set(text, audioUrl);
+      if (audioCacheRef.current.size > 20) {
+        const oldestKey = audioCacheRef.current.keys().next().value;
+        if (oldestKey !== undefined) {
+          const oldestUrl = audioCacheRef.current.get(oldestKey);
+          if (oldestUrl) URL.revokeObjectURL(oldestUrl);
+          audioCacheRef.current.delete(oldestKey);
+        }
+      }
+
       // Stop any existing audio before playing new
       stopAllAudio();
 
@@ -96,29 +179,25 @@ export function useTTSPlayback(): UseTTSPlaybackReturn {
       audio.onended = () => {
         isSpeakingRef.current = false;
         setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
         options?.onEnd?.();
       };
 
-      audio.onerror = () => {
+      audio.onerror = async () => {
         isSpeakingRef.current = false;
         setIsSpeaking(false);
         setIsLoadingTTS(false);
         setWarmLoadingMessage('');
-        URL.revokeObjectURL(audioUrl);
-        options?.onError?.();
+        await speakWithBrowser(text, options);
       };
 
       await audio.play();
     } catch (err) {
-      console.warn('[TTS] Playback failed:', err);
-      isSpeakingRef.current = false;
-      setIsSpeaking(false);
+      console.warn('[TTS] API playback failed, trying browser voice:', err);
       setIsLoadingTTS(false);
       setWarmLoadingMessage('');
-      options?.onError?.();
+      await speakWithBrowser(text, options);
     }
-  }, [stopAllAudio]);
+  }, [stopAllAudio, speakWithBrowser]);
 
   return {
     isSpeaking,

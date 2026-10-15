@@ -72,10 +72,12 @@ async function generateWithPolly(text: string): Promise<ArrayBuffer> {
 // Generate speech using OpenAI TTS (fallback)
 async function generateWithOpenAI(text: string): Promise<ArrayBuffer> {
   const openai = getOpenAIClient();
+  // Cost + quality: gpt-4o-mini-tts is cheaper than tts-1 and more natural, same voice 'nova', same speed. Instructions keep it warm/slow/clear for elderly listeners.
   const response = await openai.audio.speech.create({
-    model: 'tts-1',
+    model: 'gpt-4o-mini-tts',
     voice: 'nova',
     input: text,
+    instructions: 'Speak warmly, slowly and clearly, like a patient companion talking with an elderly listener. Gentle pace, natural pauses.',
     speed: 0.95, // Slightly slower for seniors
   });
 
