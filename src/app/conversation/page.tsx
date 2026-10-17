@@ -406,11 +406,24 @@ export default function ConversationPage() {
 
     let fullIntroduction: string;
 
+    // Audio-first: ONE first question everywhere. The screen pre-tap shows
+    // conversation.starterPrompt, so the spoken intro must use that SAME
+    // question — not a second random pick from OPENING_QUESTIONS.
+    // (OPENING_QUESTIONS is now unused here; starterPrompt is the source.)
     if (cameFromOnboarding) {
-      const question = OPENING_QUESTIONS[Math.floor(Math.random() * OPENING_QUESTIONS.length)];
+      const question = conversation.starterPrompt;
       fullIntroduction = conversation.userName
         ? `Alright ${conversation.userName}, I'm ready to listen. ${question}`
         : `Alright, I'm ready to listen. ${question}`;
+    } else if (!conversation.userContext.isReturningUser && !pendingPrompt) {
+      // New user arriving direct (not from onboarding): short greeting +
+      // SAME starterPrompt as the screen shows. Do NOT use the long
+      // generateVoiceIntroduction paragraph here — it made the greeting
+      // ~60s and asked a different question than the screen.
+      const question = conversation.starterPrompt;
+      fullIntroduction = conversation.userName
+        ? `Hello, ${conversation.userName}. I'm Embers. I'm ready to listen. ${question}`
+        : `Hello. I'm Embers. I'm ready to listen. ${question}`;
     } else {
       const { greeting, question } = generateVoiceIntroduction(
         conversation.userName,
@@ -911,7 +924,7 @@ export default function ConversationPage() {
               <p className="text-lg text-[#f9f7f2]/60 max-w-md mx-auto font-serif italic leading-relaxed">
                 {conversation.starterPrompt}
               </p>
-              <p className="text-sm text-[#f9f7f2]/50 mt-6">Tap the flame to begin</p>
+              <p className="text-sm text-[#f9f7f2]/50 mt-6">Tap the flame, then just start talking</p>
             </div>
           )}
 
