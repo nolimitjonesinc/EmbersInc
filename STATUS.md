@@ -1,14 +1,14 @@
 # EmbersInc — Status
-_Auto-updated by Status Brain on every push. Last change: Switch chat/TTS/transcribe to mini models + browser voice fallback._
+_Auto-updated by Status Brain on every push. Last change: Audio-first onboarding with one universal starter prompt, short greeting, and tap-then-talk interaction._
 
 **Status:** In progress  
 **What it is:** A voice-first web app that guides elders through recording life stories in conversation with an AI interviewer, saving them into publishable "Embers" with family sharing.  
-**Stack:** Next.js 16, React 19, TypeScript, Supabase (auth + database), OpenAI (chat + TTS), AWS Polly (voice), Stripe (payments), Tailwind CSS.
+**Stack:** Next.js 16, React 19, TypeScript, Supabase (auth + database), OpenAI (chat + TTS + transcription), AWS Polly (voice), Stripe (payments), Tailwind CSS.
 
 ## What works right now
-- **Onboarding flow** — voice-based phone OTP enrollment, name confirmation, interest selection
-- **Conversation engine** — AI interviewer with emotional state detection, context memory, and multi-persona support
-- **Voice I/O** — speech recognition input, text-to-speech playback with mobile fallback on iPhone and browser voice fallback
+- **Audio-first onboarding** — unified starter prompt used everywhere, short greeting message, tap-then-talk interaction pattern for reduced friction
+- **Voice I/O** — speech recognition input, text-to-speech playback with AWS Polly + browser voice fallback on mobile/web
+- **Conversation engine** — AI interviewer with emotional state detection, context memory, multi-persona support, mini models for cost efficiency
 - **Auto-save system** — invisible draft saving on rotation/inactivity, no data loss on crash
 - **Story persistence** — local + cloud dual storage, migration from local to authenticated accounts
 - **Family features** — invite-link sharing, parent-child prompted Q&A ("Between You & Me" category), family dashboard
@@ -19,11 +19,11 @@ _Auto-updated by Status Brain on every push. Last change: Switch chat/TTS/transc
 - **Authentication** — Supabase SSR with phone OTP + email fallback
 - **Rate limiting** — chat input validation, abuse prevention
 - **Error boundaries** — React error catching, honest user-facing messages
-- **Cost optimization** — chat, TTS, and transcription now using mini models to reduce API spend
+- **Cost optimization** — chat, TTS, and transcription using mini models; browser voice fallback reduces API calls
 
 ## Recent changes (newest first)
-- 2026-10-15 — Switch chat/TTS/transcribe to mini models + browser voice fallback for cost reduction
-- 2026-08-05 — chore: update STATUS.md
+- 2026-10-17 — Audio-first: one first question everywhere (starterPrompt) + short greeting + tap-then-talk
+- 2026-10-15 — Cost: switch chat/TTS/transcribe to mini models + browser voice fallback
 - 2026-08-04 — Add the 4-file project doc standard (CLAUDE.md, PROJECT.md, TASKS.md, STATUS.md)
 - 2026-07-20 — Harden Status Brain: retry-with-rebase on push, workflow/script automation
 - 2026-05-28 — Add "Between You & Me" prompt category for child-to-parent questions
@@ -41,7 +41,7 @@ _Auto-updated by Status Brain on every push. Last change: Switch chat/TTS/transc
 
 ## Not done / next
 - **Push notifications** — family invite/prompt notifications API exists but UI integration incomplete
-- **Accessibility audit** — WCAG 2.1 AA compliance not fully validated (task 08 in backlog)
+- **Accessibility audit** — WCAG 2.1 AA compliance not fully validated
 - **Offline mode** — no service worker; app requires live connection
 - **Analytics** — no event tracking or usage metrics
 - **Admin dashboard** — no way for solo founder to view user health, churn, revenue
@@ -50,4 +50,4 @@ _Auto-updated by Status Brain on every push. Last change: Switch chat/TTS/transc
 - **Story versioning** — only current draft stored; no revision history
 - **Advanced privacy** — no data export/deletion workflows for GDPR/CCPA
 - **Load testing** — no stress tests or capacity benchmarks run
-- **Playwright tests** — test harnesses exist but logs suggest intermittent test failures (see `.playwright-cli/`)
+- **Playwright tests** — test harnesses exist but logs suggest intermittent test failures
